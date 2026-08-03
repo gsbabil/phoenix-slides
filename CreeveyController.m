@@ -6,6 +6,7 @@
 //California 94305, USA.
 
 @import UniformTypeIdentifiers;
+@import Quartz; // QLPreviewPanel
 #import "CreeveyController.h"
 #import "KeyBindings.h"
 #import <objc/runtime.h>
@@ -356,6 +357,14 @@ CGFloat DYInterfaceTextScale(void) {
 	BOOL fullscreen = [NSUserDefaults.standardUserDefaults integerForKey:@"slideshowDefaultMode"] == 0;
 	if (NSApp.currentEvent.modifierFlags & NSEventModifierFlagOption) fullscreen = !fullscreen;
 	[self startSlideshowFullscreen:fullscreen];
+}
+
+- (IBAction)quickLook:(id)sender {
+	QLPreviewPanel *panel = QLPreviewPanel.sharedPreviewPanel;
+	if (QLPreviewPanel.sharedPreviewPanelExists && panel.isVisible)
+		[panel orderOut:nil];
+	else
+		[panel makeKeyAndOrderFront:nil];
 }
 
 static void ShowDirectoryContentsIfPossible(NSURL *u) {
@@ -1228,6 +1237,7 @@ enum {
 	COPY_TO_AGAIN,
 	RENAME,
 	DELETE_PERMANENTLY,
+	QUICK_LOOK = 20, // 18=New Window, 19=Select None (tags live only in MainMenu.xib)
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -1311,6 +1321,11 @@ enum {
 		case BEGIN_SLIDESHOW_ALTERNATE:
 			if (slidesWindow.isMainWindow ) return NO;
 			return frontWindow && frontWindow.filenamesDone && frontWindow.displayedFilenames.count;
+		case QUICK_LOOK:
+			// SPACE only previews when a browser window with a selection is frontmost,
+			// so it won't hijack SPACE in the slideshow, Prefs, or text fields
+			if (slidesWindow.isMainWindow) return NO;
+			return numSelected > 0 && frontWindow && frontWindow.window.isMainWindow && frontWindow.filenamesDone;
 		case SET_DESKTOP:
 			return slidesWindow.isMainWindow
 				? (slidesWindow.currentFile != nil)

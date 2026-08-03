@@ -115,6 +115,15 @@
                                     <action selector="openGetInfoPanel:" target="207" id="489"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Quick Look" tag="20" id="QLk-mi-001">
+                                <string key="keyEquivalent" base64-UTF8="YES">
+IA
+</string>
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="quickLook:" target="207" id="QLk-ac-002"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="485">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>

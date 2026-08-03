@@ -19,6 +19,7 @@
 #import <sys/stat.h>
 #include <sys/attr.h>
 #import "DYExiftags.h"
+@import Quartz; // QLPreviewPanel
 
 @implementation NSString (DateModifiedCompare)
 
@@ -159,7 +160,7 @@ typedef struct {
 @end
 
 
-@interface CreeveyMainWindowController () <DYFileWatcherDelegate>
+@interface CreeveyMainWindowController () <DYFileWatcherDelegate, QLPreviewPanelDataSource, QLPreviewPanelDelegate>
 @property (nonatomic, readonly) NSSplitView *splitView;
 @property BOOL wantsSubfolders;
 @property (nonatomic, strong) NSString *recurseRoot;
@@ -399,6 +400,49 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 }
 - (void)selectIndex:(NSUInteger)i {
 	[imgMatrix selectIndex:i];
+}
+
+#pragma mark Quick Look panel
+
+- (BOOL)acceptsPreviewPanelControl:(QLPreviewPanel *)panel {
+	return filenamesDone && displayedFilenames.count > 0;
+}
+
+- (void)beginPreviewPanelControl:(QLPreviewPanel *)panel {
+	panel.delegate = self;
+	panel.dataSource = self;
+	NSUInteger sel = imgMatrix.selectedIndexes.firstIndex;
+	panel.currentPreviewItemIndex = (sel == NSNotFound) ? 0 : sel;
+}
+
+- (void)endPreviewPanelControl:(QLPreviewPanel *)panel {
+	panel.delegate = nil;
+	panel.dataSource = nil;
+}
+
+- (NSInteger)numberOfPreviewItemsInPreviewPanel:(QLPreviewPanel *)panel {
+	return displayedFilenames.count;
+}
+
+- (id <QLPreviewItem>)previewPanel:(QLPreviewPanel *)panel previewItemAtIndex:(NSInteger)index {
+	if (index < 0 || index >= (NSInteger)displayedFilenames.count) return nil;
+	return [NSURL fileURLWithPath:ResolveAliasToPath(displayedFilenames[index])];
+}
+
+// Forward the arrow keys to the grid so it tracks the panel in lock-step;
+// closing Quick Look then leaves the browsed image selected (Finder-style).
+- (BOOL)previewPanel:(QLPreviewPanel *)panel handleEvent:(NSEvent *)event {
+	if (event.type == NSEventTypeKeyDown && event.characters.length) {
+		unichar c = [event.characters characterAtIndex:0];
+		if (c == NSLeftArrowFunctionKey || c == NSRightArrowFunctionKey ||
+			c == NSUpArrowFunctionKey || c == NSDownArrowFunctionKey) {
+			[imgMatrix keyDown:event];
+			NSUInteger sel = imgMatrix.selectedIndexes.firstIndex;
+			if (sel != NSNotFound) panel.currentPreviewItemIndex = sel;
+			return YES;
+		}
+	}
+	return NO;
 }
 
 - (void)openFiles:(NSArray *)a withSlideshow:(BOOL)doSlides{
