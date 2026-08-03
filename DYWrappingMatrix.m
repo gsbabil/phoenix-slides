@@ -845,7 +845,12 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 		case NSUpArrowFunctionKey:
 			break;
 		default:
-			[super keyDown:e];
+			// Let menu shortcuts fire before NSControl turns Space/Return into a
+			// click on our action (which starts the slideshow). This is what makes
+			// Space = Quick Look while Return still begins the slideshow. AppKit does
+			// not auto-dispatch no-modifier menu key equivalents (like plain Space).
+			if (![NSApp.mainMenu performKeyEquivalent:e])
+				[super keyDown:e];
 			return;
 	}
 	NSUInteger n;
