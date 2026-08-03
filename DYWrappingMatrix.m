@@ -115,6 +115,12 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	BOOL _respondsToLoadImageForFile, _respondsToSelectionDidChange;
 	NSMutableArray *_movedUrls, *_originPaths;
 	id __weak _appDelegate;
+
+	// instant hover tool tip for truncated file names
+	NSTrackingArea *_nameTipTracking;
+	NSWindow *_nameTipWindow;
+	NSTextField *_nameTipField;
+	NSInteger _nameTipIndex; // cell the tip is currently showing, or -1
 }
 @synthesize delegate, loadingImage;
 
@@ -174,7 +180,8 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 		_maxCellWidth = FLT_MAX;
 		textHeight = round(DEFAULT_TEXTHEIGHT * DYInterfaceTextScale());
 		autoRotate = YES;
-		
+		_nameTipIndex = -1;
+
 		[self registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
 	}
 	return self;
@@ -579,11 +586,107 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 		_contentSize = mySize;
 		[self invalidateIntrinsicContentSize];
 	}
+	[self hideNameTip]; // a reflow would leave any visible name tip over the wrong cell
 }
 
 - (NSSize)intrinsicContentSize
 {
 	return _contentSize;
+}
+
+- (NSFont *)labelFont {
+	// base size ranges 6 to 12 with the thumbnail size, scaled by the interface text size
+	return [NSFont systemFontOfSize:(cellWidth >= 160 ? 12 : 4+cellWidth/20) * DYInterfaceTextScale()];
+}
+
+#pragma mark instant name tool tips
+// Reveal the full file name on hover, but only when it isn't already fully
+// visible: either the labels are hidden, or the name is too long for its cell
+// and would be drawn truncated with an ellipsis. We draw the tip ourselves in a
+// small borderless window so it appears instantly, without the system tool-tip
+// hover delay (which AppKit re-arms every time the pointer enters a new cell).
+- (BOOL)nameIsClippedAtIndex:(NSUInteger)i {
+	if (textHeight == 0) return YES; // labels hidden: nothing is shown, so reveal it
+	NSString *name = [filenames[i] lastPathComponent];
+	CGFloat textWidth = [name sizeWithAttributes:@{NSFontAttributeName: self.labelFont}].width;
+	return ceil(textWidth) > area_w - 4; // account for the cell's ~2px inset on each side
+}
+
+- (void)updateTrackingAreas {
+	[super updateTrackingAreas];
+	if (_nameTipTracking) [self removeTrackingArea:_nameTipTracking];
+	_nameTipTracking = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+		options:NSTrackingMouseMoved|NSTrackingMouseEnteredAndExited|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect
+		owner:self userInfo:nil];
+	[self addTrackingArea:_nameTipTracking];
+}
+
+- (void)mouseMoved:(NSEvent *)e {
+	[super mouseMoved:e];
+	NSPoint p = [self convertPoint:e.locationInWindow fromView:nil];
+	NSInteger i = [self point2cellnum:p];
+	if (i < 0 || i >= (NSInteger)numCells || !NSPointInRect(p, [self cellnum2rect:i]) || ![self nameIsClippedAtIndex:i])
+		[self hideNameTip];
+	else
+		[self showNameTip:[filenames[i] lastPathComponent] forCell:i];
+}
+
+- (void)mouseExited:(NSEvent *)e {
+	[super mouseExited:e];
+	[self hideNameTip];
+}
+
+- (void)scrollWheel:(NSEvent *)e {
+	[self hideNameTip]; // don't leave a stale tip while the content scrolls under the cursor
+	[super scrollWheel:e];
+}
+
+- (void)hideNameTip {
+	_nameTipIndex = -1;
+	[_nameTipWindow orderOut:nil];
+}
+
+- (void)showNameTip:(NSString *)name forCell:(NSInteger)i {
+	if (_nameTipWindow.isVisible && _nameTipIndex == i) return; // already showing this cell
+	_nameTipIndex = i;
+	if (!_nameTipWindow) {
+		NSView *bg = [[NSView alloc] initWithFrame:NSZeroRect];
+		bg.wantsLayer = YES;
+		bg.layer.cornerRadius = 4;
+		bg.layer.borderWidth = 0.5;
+		_nameTipField = [NSTextField labelWithString:@""];
+		_nameTipField.font = [NSFont toolTipsFontOfSize:0];
+		[bg addSubview:_nameTipField];
+		_nameTipWindow = [[NSWindow alloc] initWithContentRect:NSZeroRect styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+		_nameTipWindow.opaque = NO;
+		_nameTipWindow.backgroundColor = NSColor.clearColor;
+		_nameTipWindow.hasShadow = YES;
+		_nameTipWindow.level = NSPopUpMenuWindowLevel;
+		_nameTipWindow.ignoresMouseEvents = YES;
+		_nameTipWindow.contentView = bg;
+	}
+	// match the current appearance, then lay out around the text
+	_nameTipWindow.appearance = self.window.effectiveAppearance;
+	NSView *bg = _nameTipWindow.contentView;
+	bg.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;
+	bg.layer.borderColor = [NSColor.gridColor colorWithAlphaComponent:0.8].CGColor;
+	_nameTipField.textColor = NSColor.controlTextColor;
+	_nameTipField.stringValue = name;
+	[_nameTipField sizeToFit];
+	const CGFloat padX = 6, padY = 3;
+	NSSize fs = _nameTipField.frame.size;
+	_nameTipField.frameOrigin = NSMakePoint(padX, padY);
+	NSRect wf = NSMakeRect(0, 0, ceil(fs.width) + padX*2, ceil(fs.height) + padY*2);
+	// place just below-right of the cursor, clamped to the screen
+	NSPoint m = NSEvent.mouseLocation;
+	wf.origin = NSMakePoint(m.x + 12, m.y - wf.size.height - 16);
+	NSRect vis = (self.window.screen ?: NSScreen.mainScreen).visibleFrame;
+	if (NSMaxX(wf) > NSMaxX(vis)) wf.origin.x = NSMaxX(vis) - wf.size.width;
+	if (wf.origin.x < NSMinX(vis)) wf.origin.x = NSMinX(vis);
+	if (wf.origin.y < NSMinY(vis)) wf.origin.y = m.y + 16; // flip above the cursor near the screen's bottom
+	[_nameTipWindow setFrame:wf display:YES];
+	if (!_nameTipWindow.isVisible)
+		[_nameTipWindow orderFront:nil];
 }
 
 - (void)drawRect:(NSRect)rect {
@@ -598,7 +701,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	NSRect textCellRect = NSMakeRect(0, 0, area_w, textHeight + _vPadding/2);
 	NSRect cellRect;
 	NSWindow *myWindow = self.window;
-	myTextCell.font = [NSFont systemFontOfSize:(cellWidth >= 160 ? 12 : 4+cellWidth/20) * DYInterfaceTextScale()]; // base ranges 6 to 12, scaled by the interface text size
+	myTextCell.font = self.labelFont;
 	myTextCell.textColor = bgColor.bestTextColor;
 	for (i=0; i<numCells; ++i) {
 		row = i/numCols;
