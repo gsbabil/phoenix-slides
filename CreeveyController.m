@@ -944,8 +944,12 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	[alert addButtonWithTitle:NSLocalizedString(@"Rename", @"")];
 	[alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"")];
 	alert.window.initialFirstResponder = input;
-	if ([alert runModal] != NSAlertFirstButtonReturn)
+	if ([alert runModal] != NSAlertFirstButtonReturn) {
+		// cancelled: keep the same image selected in the browser
+		if (!slidesWindow.isMainWindow)
+			[frontWindow.window makeFirstResponder:frontWindow.imageMatrix];
 		return;
+	}
 
 	// file names are single-line; drop any newlines that slipped in (e.g. via paste)
 	NSString *newName = [[input.string componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet] componentsJoinedByString:@""];
@@ -967,6 +971,19 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 
 	NSUndoManager *um = slidesWindow.isMainWindow ? slidesWindow.undoManager : frontWindow.window.undoManager;
 	[self performRenameFrom:oldPath to:newPath undoManager:um];
+
+	// keep the just-renamed file selected in the browser. It is re-added asynchronously
+	// (via filesWereUndeleted:), so defer the selection to run right after that.
+	if (!slidesWindow.isMainWindow) {
+		CreeveyMainWindowController *wc = frontWindow;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			NSUInteger idx = [wc indexOfFilename:newPath];
+			if (idx != NSNotFound) {
+				[wc.window makeFirstResponder:wc.imageMatrix];
+				[wc selectIndex:idx];
+			}
+		});
+	}
 }
 
 // does the actual file rename, updates the UI, and registers the inverse for undo/redo
