@@ -11,6 +11,7 @@
 #import "SlideshowWindow.h"
 #import "DYImageView.h"
 #import "DYImageCache.h"
+#import "KeyBindings.h"
 #import "DYCarbonGoodies.h"
 #import "CreeveyController.h"
 #import "DYRandomizableArray.h"
@@ -876,6 +877,11 @@ scheduledTimerWithTimeInterval:timerIntvl
 		s = self.contentView.frame.size;
 		r.origin.x = s.width - r.size.width - 50;
 		r.origin.y = s.height - r.size.height - 55;
+		// if the cheat sheet fits but its bottom would fall below the window, nudge it
+		// up so nothing is clipped; if it's taller than the window, leave it top-anchored
+		// (the navigation keys at the top matter most)
+		if (r.origin.y < 20 && r.size.height <= s.height - 20)
+			r.origin.y = 20;
 		helpFld.frame = NSIntegralRect(r);
 		helpFld.autoresizingMask = NSViewMinXMargin|NSViewMinYMargin;
 		return;
@@ -974,7 +980,11 @@ scheduledTimerWithTimeInterval:timerIntvl
 	if (c == ' ' && ((e.modifierFlags & NSEventModifierFlagShift) != 0)) {
 		c = NSLeftArrowFunctionKey;
 	}
-	DYImageInfo *obj;
+	SlideshowAction act = [((CreeveyController *)NSApp.delegate).keyBindings slideshowActionForEvent:e];
+	if (act != SlideshowActionNone) {
+		[self performSlideshowAction:act];
+		return;
+	}
 	switch (c) {
 		case '!':
 			[self setTimer:0.5];
@@ -1014,7 +1024,22 @@ scheduledTimerWithTimeInterval:timerIntvl
 		case '\x1b': // escape
 			[self endSlideshow];
 			break;
-		case 'i':
+		case NSHelpFunctionKey: // the physical Help key isn't rebindable
+			[self performSlideshowAction:SlideshowActionHelp];
+			break;
+		default:
+			[super keyDown:e];
+	}
+}
+
+// The rebindable slideshow actions, dispatched by keyDown: via the config's
+// keystroke lookup. Non-rebindable navigation stays in keyDown:'s switch.
+- (void)performSlideshowAction:(SlideshowAction)action {
+	DYImageInfo *obj;
+	switch (action) {
+		case SlideshowActionNone:
+			break;
+		case SlideshowActionToggleInfo:
 			// cycles three ways: info, info + exif, none
 			hideInfoFld = !infoFld.hidden && !exifFld.enclosingScrollView.hidden;
 			if (!infoFld.hidden)
@@ -1030,7 +1055,7 @@ scheduledTimerWithTimeInterval:timerIntvl
 				[NSUserDefaults.standardUserDefaults setInteger:infoFldVisible forKey:@"DYSlideshowWindowVisibleFields"];
 			}
 			break;
-		case 'p':
+		case SlideshowActionTogglePath:
 			if (infoFld.hidden) {
 				infoFld.hidden = NO;
 				_showPath = YES;
@@ -1040,13 +1065,10 @@ scheduledTimerWithTimeInterval:timerIntvl
 			[self updateInfoFld];
 			[NSUserDefaults.standardUserDefaults setBool:_showPath forKey:@"DYSlideshowWindowVisiblePath"];
 			break;
-		case 'h':
-		case '?':
-		case '/':
-		case NSHelpFunctionKey: // doesn't work, trapped at a higher level?
+		case SlideshowActionHelp:
 			[self toggleHelp];
 			break;
-		case 'I':
+		case SlideshowActionMoreExif:
 			if (exifFld.enclosingScrollView.hidden) {
 				moreExif = YES;
 				hideInfoFld = NO;
@@ -1058,35 +1080,37 @@ scheduledTimerWithTimeInterval:timerIntvl
 			}
 			[NSUserDefaults.standardUserDefaults setInteger:2 forKey:@"DYSlideshowWindowVisibleFields"];
 			break;
-		case 'l':
+		case SlideshowActionRotateLeft:
 			[self setRotation:90];
 			break;
-		case 'r':
+		case SlideshowActionRotateRight:
 			[self setRotation:-90];
 			break;
-		case 'f':
+		case SlideshowActionRename:
+			[(CreeveyController *)NSApp.delegate renameSelectedFile:nil];
+			break;
+		case SlideshowActionMoveToTrash:
+			[(CreeveyController *)NSApp.delegate moveToTrash:nil];
+			break;
+		case SlideshowActionDeletePermanently:
+			[(CreeveyController *)NSApp.delegate deleteSelectedFilesPermanently:nil];
+			break;
+		case SlideshowActionFlip:
 			[self toggleFlip];
 			break;
-		case '=':
-			//if ([imgView showActualSize])
-			//	[zooms removeObjectForKey:[filenames objectAtIndex:currentIndex]];
-			// actually, '=' doesn't center the pic, so this is wrong
-			// if you zoom or move a pic while in actualsize mode, you're basically stuck with a non-default zoom
-			// intentional fall-through to next cases
-		case '+':
-		case '-':
+		case SlideshowActionActualSize:
+		case SlideshowActionZoomIn:
+		case SlideshowActionZoomOut:
 			if ((obj = [imgCache infoForKey:ResolveAliasToPath(filenames[currentIndex])])) {
-				if (c == '+') [imgView zoomIn];
-				else if (c == '-') [imgView zoomOut];
+				if (action == SlideshowActionZoomIn) [imgView zoomIn];
+				else if (action == SlideshowActionZoomOut) [imgView zoomOut];
 				else [imgView zoomActualSize];
 				[self saveZoomAndLoadFullSize:obj];
 			}
 			break;
-		case '*':
+		case SlideshowActionResetView:
 			[self redisplayImage]; // this resets zoom, rotate, and flip
 			break;
-		default:
-			[super keyDown:e];
 	}
 }
 

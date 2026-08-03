@@ -7,6 +7,7 @@
 
 @import UniformTypeIdentifiers;
 #import "CreeveyController.h"
+#import "KeyBindings.h"
 #import <objc/runtime.h>
 #import "DYJpegtran.h"
 #import "DYCarbonGoodies.h"
@@ -153,6 +154,7 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 	NSMutableArray *_coalescedFilesToOpen;
 }
 @synthesize slidesWindow, jpegProgressBar, exifTextView, exifThumbnailDiscloseBtn, prefsWin, slideshowApplyBtn;
+@synthesize keyBindings = _keyBindings;
 
 +(void)initialize
 {
@@ -1039,9 +1041,18 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
 	NSUserDefaults *u = NSUserDefaults.standardUserDefaults;
+
+	// load the keybinding config and apply it to the menu (also creates a template
+	// on first launch so the file is there to edit)
+	_keyBindings = [[KeyBindings alloc] init];
+	[_keyBindings writeTemplateIfMissing]; // migrate/create before reading
+	[_keyBindings load];
+	[_keyBindings applyToMainMenu];
+	[_keyBindings reportErrorsIfAny];
+
 	[self showExifThumbnail:[u boolForKey:@"exifThumbnailShow"]
 			   shrinkWindow:NO];
-	
+
 	_appDidFinishLaunching = YES;
 	if (_windowsWereRestoredAtLaunch && _filesWereOpenedAtLaunch) {
 		// ugly hack to force the slideshow window to be on top of the restored windows
@@ -1371,6 +1382,22 @@ enum {
 
 - (IBAction)openAboutPanel:(id)sender {
 	[NSApp orderFrontStandardAboutPanelWithOptions:@{@"ApplicationIcon": [NSImage imageNamed:@"logo"]}];
+}
+
+#pragma mark configuration
+
+- (IBAction)reloadConfiguration:(id)sender {
+	[_keyBindings load];
+	[_keyBindings applyToMainMenu];
+	[_keyBindings reportErrorsIfAny];
+}
+
+- (IBAction)editConfiguration:(id)sender {
+	[_keyBindings openInEditor];
+}
+
+- (IBAction)revealConfiguration:(id)sender {
+	[_keyBindings revealInFinder];
 }
 
 // avoid warning "PerformSelector may cause a leak because its selector is unknown"

@@ -12,6 +12,7 @@
 #import "DYFileWatcher.h"
 
 #import "CreeveyController.h"
+#import "KeyBindings.h"
 #import "DYCreeveyBrowser.h"
 #import "DYImageCache.h"
 #import "DYWrappingMatrix.h"
@@ -908,6 +909,21 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 								 toTarget:self
 							   withObject:nil];
 		return;
+	}
+	if (filenamesDone) {
+		switch ([appDelegate.keyBindings browserActionForEvent:e]) {
+			case BrowserActionMoveToTrash:
+				[appDelegate moveToTrash:nil];
+				return;
+			case BrowserActionDeletePermanently:
+				[appDelegate deleteSelectedFilesPermanently:nil];
+				return;
+			case BrowserActionRename:
+				[appDelegate renameSelectedFile:nil];
+				return;
+			case BrowserActionNone:
+				break;
+		}
 	}
 	[super keyDown:e];
 }

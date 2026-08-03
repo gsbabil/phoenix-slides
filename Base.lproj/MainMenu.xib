@@ -32,6 +32,27 @@
                                     <action selector="openPrefWin:" target="207" id="411"/>
                                 </connections>
                             </menuItem>
+                            <menuItem isSeparatorItem="YES" id="cfg-sep-00">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Edit Configuration" id="cfg-ed-i00">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="editConfiguration:" target="207" id="cfg-ed-i01"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Reload Configuration" id="cfg-rl-d00">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="reloadConfiguration:" target="207" id="cfg-rl-d01"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Reveal Configuration in Finder" id="cfg-rv-l00">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="revealConfiguration:" target="207" id="cfg-rv-l01"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="143">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
@@ -71,7 +92,7 @@
                 <menuItem title="File" tag="300" id="83">
                     <menu key="submenu" title="File" id="81">
                         <items>
-                            <menuItem title="New Window" keyEquivalent="n" id="494">
+                            <menuItem title="New Window" tag="18" keyEquivalent="n" id="494">
                                 <connections>
                                     <action selector="newWindow:" target="207" id="496"/>
                                 </connections>
@@ -204,7 +225,7 @@ CA
                                     <action selector="selectAll:" target="-1" id="351"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="Select None" keyEquivalent="A" id="334">
+                            <menuItem title="Select None" tag="19" keyEquivalent="A" id="334">
                                 <connections>
                                     <action selector="selectNone:" target="-1" id="388"/>
                                 </connections>

@@ -8,7 +8,7 @@
 @import Cocoa;
 #define CREEVEY_DEFAULT_PATH [@"~/Pictures" stringByResolvingSymlinksInPath]
 
-@class DYImageCache, SlideshowWindow, DYJpegtranPanel;
+@class DYImageCache, SlideshowWindow, DYJpegtranPanel, KeyBindings;
 
 NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache *cache, BOOL moreExif);
 
@@ -33,6 +33,7 @@ NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache 
 @property (nonatomic, readonly) NSMutableSet * __strong *cats;
 - (void)updateCats;
 @property (nonatomic, readonly) DYImageCache *thumbsCache;
+@property (nonatomic, readonly) KeyBindings *keyBindings;
 NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders);
 - (BOOL)handledDirectory:(NSURL *)url subfolders:(BOOL)recurse e:(NSDirectoryEnumerator *)e;
 - (BOOL)shouldShowFile:(NSURL *)path;
@@ -66,6 +67,10 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 // info window
 - (IBAction)openGetInfoPanel:(id)sender;
 - (IBAction)toggleExifThumbnail:(id)sender;
+
+- (IBAction)reloadConfiguration:(id)sender;
+- (IBAction)editConfiguration:(id)sender;
+- (IBAction)revealConfiguration:(id)sender;
 
 - (IBAction)openAboutPanel:(id)sender;
 - (IBAction)stopModal:(id)sender;
