@@ -110,6 +110,12 @@
                                     <action selector="revealSelectedFilesInFinder:" target="207" id="344"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Rename…" tag="16" id="Rn1-me-100">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="renameSelectedFile:" target="207" id="Rn2-me-102"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Move To..." tag="12" id="SpE-qb-DUd">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
@@ -140,6 +146,15 @@ CA
 </string>
                                 <connections>
                                     <action selector="moveToTrash:" target="207" id="501"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Delete Immediately" tag="17" id="Dl1-me-101">
+                                <string key="keyEquivalent" base64-UTF8="YES">
+CA
+</string>
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="deleteSelectedFilesPermanently:" target="207" id="Dl2-me-103"/>
                                 </connections>
                             </menuItem>
                         </items>

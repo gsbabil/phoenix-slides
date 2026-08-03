@@ -7,6 +7,7 @@
 
 @import UniformTypeIdentifiers;
 #import "CreeveyController.h"
+#import <objc/runtime.h>
 #import "DYJpegtran.h"
 #import "DYCarbonGoodies.h"
 
@@ -93,6 +94,30 @@ NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache 
 @implementation DYColorToDataTransformer
 + (NSArray<Class> *)allowedTopLevelClasses {
 	return [[super allowedTopLevelClasses] arrayByAddingObject:[NSColor class]];
+}
+@end
+
+static NSString *DYCharacterCountString(NSUInteger n) {
+	return [NSString stringWithFormat:(n == 1 ? NSLocalizedString(@"%lu character", @"")
+											  : NSLocalizedString(@"%lu characters", @"")), (unsigned long)n];
+}
+
+// Return/Enter in the multi-line rename field confirms the dialog (clicks "Rename")
+// instead of inserting a newline, and the character count updates as the user types.
+@interface DYRenameFieldDelegate : NSObject <NSTextViewDelegate>
+@property (weak) NSAlert *alert;
+@property (weak) NSTextField *countLabel;
+@end
+@implementation DYRenameFieldDelegate
+- (BOOL)textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector {
+	if (commandSelector == @selector(insertNewline:)) {
+		[self.alert.buttons.firstObject performClick:nil];
+		return YES;
+	}
+	return NO;
+}
+- (void)textDidChange:(NSNotification *)notification {
+	self.countLabel.stringValue = DYCharacterCountString([[notification.object string] length]);
 }
 @end
 
@@ -739,6 +764,232 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	[self removePicsAndTrash:YES];
 }
 
+// permanently delete the selected file(s), bypassing the trash. This cannot be undone,
+// so we always ask for confirmation first.
+- (IBAction)deleteSelectedFilesPermanently:(id)sender {
+	NSArray *files;
+	if (slidesWindow.isMainWindow) {
+		NSString *s = slidesWindow.currentFile;
+		files = s ? @[s] : @[];
+	} else {
+		files = frontWindow.currentSelection;
+	}
+	NSUInteger n = files.count;
+	if (n == 0) {
+		NSBeep();
+		return;
+	}
+
+	NSAlert *alert = [[NSAlert alloc] init];
+	alert.messageText = n == 1
+		? [NSString stringWithFormat:NSLocalizedString(@"Are you sure you want to permanently delete “%@”?", @""), [files[0] lastPathComponent]]
+		: [NSString stringWithFormat:NSLocalizedString(@"Are you sure you want to permanently delete these %lu items?", @""), (unsigned long)n];
+	alert.informativeText = NSLocalizedString(@"This operation cannot be undone.", @"");
+	if (n == 1)
+		alert.icon = [thumbsCache imageForKey:ResolveAliasToPath(files[0])];
+	[alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"")];
+	NSButton *deleteButton = [alert addButtonWithTitle:NSLocalizedString(@"Delete", @"Delete Immediately Button")];
+	deleteButton.hasDestructiveAction = YES;
+	if ([alert runModal] != NSAlertSecondButtonReturn)
+		return;
+
+	BOOL slideshowMain = slidesWindow.isMainWindow;
+	NSUInteger oldIndex = slideshowMain ? NSNotFound : frontWindow.selectedIndexes.firstIndex;
+	NSMutableArray<NSString *> *notDeleted = [NSMutableArray array];
+	for (NSString *fullpath in files) {
+		NSURL *url = [NSURL fileURLWithPath:fullpath isDirectory:NO];
+		NSError * __autoreleasing error = nil;
+		if ([NSFileManager.defaultManager removeItemAtURL:url error:&error]) {
+			if (!IsAliasFilePath(fullpath))
+				[thumbsCache removeImageForKey:fullpath];
+			[creeveyWindows makeObjectsPerformSelector:@selector(fileWasDeleted:) withObject:fullpath];
+			if (slidesWindow.visible)
+				[slidesWindow removeImageForFile:fullpath];
+		} else {
+			[notDeleted addObject:fullpath];
+		}
+	}
+	if (notDeleted.count) {
+		alert = [[NSAlert alloc] init];
+		alert.informativeText = notDeleted.count == 1
+			? [NSString stringWithFormat:NSLocalizedString(@"The file “%@” could not be deleted because an error occurred.", @""), [notDeleted[0] lastPathComponent]]
+			: [NSString stringWithFormat:NSLocalizedString(@"%lu file(s) could not be deleted because an error occurred.", @""), (unsigned long)notDeleted.count];
+		[alert runModal];
+	}
+	if (!slideshowMain) {
+		[frontWindow updateExifInfo];
+		// no selection means all files were successfully deleted; select the next image if possible
+		if (frontWindow.selectedIndexes.firstIndex == NSNotFound && oldIndex != NSNotFound && oldIndex < frontWindow.displayedFilenames.count)
+			[frontWindow selectIndex:oldIndex];
+	}
+}
+
+// rename the single selected file. Undoable.
+- (IBAction)renameSelectedFile:(id)sender {
+	NSString *oldPath;
+	if (slidesWindow.isMainWindow) {
+		oldPath = slidesWindow.currentFile;
+	} else {
+		NSArray *sel = frontWindow.currentSelection;
+		if (sel.count != 1) {
+			NSBeep();
+			return;
+		}
+		oldPath = sel[0];
+	}
+	if (oldPath == nil) {
+		NSBeep();
+		return;
+	}
+
+	NSString *oldName = oldPath.lastPathComponent;
+	NSAlert *alert = [[NSAlert alloc] init];
+	alert.messageText = NSLocalizedString(@"Rename File", @"");
+	// keep the message constant (the current name is shown in the field below) so it
+	// stays one line no matter how long the file name is
+	alert.informativeText = NSLocalizedString(@"Enter a new name for this file.", @"");
+	alert.icon = [thumbsCache imageForKey:ResolveAliasToPath(oldPath)];
+	// Word-wrapping field, fixed width, whose height grows to show the ENTIRE name so
+	// nothing is ever hidden, plus a live character count so the true length is always
+	// explicit — before and after editing.
+	CGFloat width = 340;
+	NSFont *font = [NSFont systemFontOfSize:NSFont.systemFontSize];
+	NSSize inset = NSMakeSize(4, 3);
+	NSScrollView *sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, width, 54)];
+	sv.borderType = NSBezelBorder;
+	sv.hasVerticalScroller = YES;
+	NSSize probeContent = [NSScrollView contentSizeForFrameSize:NSMakeSize(width, 54)
+										horizontalScrollerClass:Nil verticalScrollerClass:Nil
+													 borderType:NSBezelBorder controlSize:NSControlSizeRegular
+												  scrollerStyle:NSScrollerStyleOverlay];
+	CGFloat contentWidth = probeContent.width;
+	CGFloat borderChrome = 54 - probeContent.height; // frame height beyond the text area
+
+	NSTextView *input = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, contentWidth, 54)];
+	input.font = font;
+	input.richText = NO;
+	// never let macOS "helpfully" rewrite a file name
+	input.automaticQuoteSubstitutionEnabled = NO;
+	input.automaticDashSubstitutionEnabled = NO;
+	input.automaticTextReplacementEnabled = NO;
+	input.automaticSpellingCorrectionEnabled = NO;
+	input.textContainerInset = inset;
+	input.minSize = NSMakeSize(0, 0);
+	input.maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
+	input.verticallyResizable = YES;
+	input.horizontallyResizable = NO;
+	input.textContainer.widthTracksTextView = YES;
+	input.textContainer.size = NSMakeSize(contentWidth, FLT_MAX);
+	input.string = oldName;
+
+	// count the ACTUAL wrapped lines at the display width (line fragments, not a rounded
+	// height) and grow the box to show them all, bounded to ~1/3 of the screen
+	NSLayoutManager *lm = input.layoutManager;
+	NSTextContainer *tc = input.textContainer;
+	[lm ensureLayoutForTextContainer:tc];
+	CGFloat lineHeight = [lm defaultLineHeightForFont:font];
+	NSUInteger numLines = 0, glyphIndex = 0, glyphCount = lm.numberOfGlyphs;
+	while (glyphIndex < glyphCount) {
+		NSRange lineRange;
+		[lm lineFragmentRectForGlyphAtIndex:glyphIndex effectiveRange:&lineRange];
+		glyphIndex = NSMaxRange(lineRange);
+		++numLines;
+	}
+	CGFloat screenAvail = (NSScreen.mainScreen ? NSScreen.mainScreen.visibleFrame.size.height : 800) / 3.0;
+	NSUInteger maxRows = MAX((NSUInteger)1, (NSUInteger)floor(screenAvail / lineHeight));
+	NSUInteger rows = MAX((NSUInteger)1, MIN(maxRows, numLines));
+	sv.autohidesScrollers = (rows >= numLines); // persistent bar only if (improbably) clipped
+	CGFloat contentHeight = rows * lineHeight + 2 * inset.height;
+	CGFloat scrollHeight = contentHeight + borderChrome;
+	input.frame = NSMakeRect(0, 0, contentWidth, contentHeight);
+	sv.documentView = input;
+
+	// live character count under the field
+	NSTextField *countLabel = [NSTextField labelWithString:DYCharacterCountString(oldName.length)];
+	countLabel.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+	countLabel.textColor = NSColor.secondaryLabelColor;
+	countLabel.alignment = NSTextAlignmentRight;
+	CGFloat labelHeight = ceil(countLabel.intrinsicContentSize.height);
+	CGFloat gap = 4;
+	countLabel.frame = NSMakeRect(0, 0, width, labelHeight);
+	sv.frame = NSMakeRect(0, labelHeight + gap, width, scrollHeight);
+
+	NSView *accessory = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, width, scrollHeight + gap + labelHeight)];
+	[accessory addSubview:sv];
+	[accessory addSubview:countLabel];
+	alert.accessoryView = accessory;
+
+	DYRenameFieldDelegate *fieldDelegate = [[DYRenameFieldDelegate alloc] init];
+	fieldDelegate.alert = alert;
+	fieldDelegate.countLabel = countLabel;
+	input.delegate = fieldDelegate;
+	// NSTextView.delegate is weak, so tie the delegate's lifetime to the alert
+	objc_setAssociatedObject(alert, _cmd, fieldDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	// preselect the base name (without the extension), like the Finder
+	NSString *ext = oldName.pathExtension;
+	input.selectedRange = NSMakeRange(0, ext.length ? oldName.length - ext.length - 1 : oldName.length);
+	[alert addButtonWithTitle:NSLocalizedString(@"Rename", @"")];
+	[alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"")];
+	alert.window.initialFirstResponder = input;
+	if ([alert runModal] != NSAlertFirstButtonReturn)
+		return;
+
+	// file names are single-line; drop any newlines that slipped in (e.g. via paste)
+	NSString *newName = [[input.string componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet] componentsJoinedByString:@""];
+	if (newName.length == 0 || [newName isEqualToString:oldName])
+		return; // nothing to do
+	if ([newName containsString:@"/"] || [newName hasPrefix:@"."]) {
+		alert = [[NSAlert alloc] init];
+		alert.informativeText = NSLocalizedString(@"File names cannot contain “/” or begin with a period.", @"");
+		[alert runModal];
+		return;
+	}
+	NSString *newPath = [oldPath.stringByDeletingLastPathComponent stringByAppendingPathComponent:newName];
+	if ([NSFileManager.defaultManager fileExistsAtPath:newPath]) {
+		alert = [[NSAlert alloc] init];
+		alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"An item named “%@” already exists in this location.", @""), newName];
+		[alert runModal];
+		return;
+	}
+
+	NSUndoManager *um = slidesWindow.isMainWindow ? slidesWindow.undoManager : frontWindow.window.undoManager;
+	[self performRenameFrom:oldPath to:newPath undoManager:um];
+}
+
+// does the actual file rename, updates the UI, and registers the inverse for undo/redo
+- (void)performRenameFrom:(NSString *)oldPath to:(NSString *)newPath undoManager:(NSUndoManager *)um {
+	NSError * __autoreleasing err = nil;
+	if (![NSFileManager.defaultManager moveItemAtPath:oldPath toPath:newPath error:&err]) {
+		NSAlert *alert = [[NSAlert alloc] init];
+		alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"The file “%@” could not be renamed because of an error: %@", @""), oldPath.lastPathComponent, err.localizedDescription];
+		[alert runModal];
+		return;
+	}
+	[self fileWasRenamedFrom:oldPath to:newPath];
+	[um registerUndoWithTarget:self handler:^(id target) {
+		[target performRenameFrom:newPath to:oldPath undoManager:um];
+	}];
+	[um setActionName:NSLocalizedString(@"Rename", @"for undo")];
+}
+
+// propagate a completed rename to the open windows (a rename looks like a delete + re-add)
+- (void)fileWasRenamedFrom:(NSString *)oldPath to:(NSString *)newPath {
+	if (!IsAliasFilePath(oldPath))
+		[thumbsCache removeImageForKey:oldPath];
+	[creeveyWindows makeObjectsPerformSelector:@selector(fileWasDeleted:) withObject:oldPath];
+	[creeveyWindows makeObjectsPerformSelector:@selector(filesWereUndeleted:) withObject:@[newPath]];
+	if (slidesWindow.visible) {
+		if (slidesWindow.isMainWindow && [slidesWindow.currentFile isEqualToString:oldPath]) {
+			// keep the slideshow showing the renamed file: insert the new name, then drop the old one
+			[slidesWindow insertFile:newPath atIndex:slidesWindow.currentIndex];
+			[slidesWindow removeImageForFile:oldPath];
+		} else {
+			[slidesWindow removeImageForFile:oldPath];
+			[slidesWindow filesWereUndeleted:@[newPath]];
+		}
+	}
+}
+
 #pragma mark matrix view methods
 
 - (void)moveElsewhere {
@@ -936,6 +1187,8 @@ enum {
 	MOVE_TO_AGAIN,
 	COPY_TO,
 	COPY_TO_AGAIN,
+	RENAME,
+	DELETE_PERMANENTLY,
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -986,6 +1239,7 @@ enum {
 		case COPY_TO_AGAIN:
 		case COPY_TO:
 		case MOVE_TO_TRASH:
+		case DELETE_PERMANENTLY:
 		case JPEG_OP:
 			// only when slides isn't loading cache!
 			// only if writeable (we just test the first file in the list)
@@ -1022,6 +1276,13 @@ enum {
 			return slidesWindow.isMainWindow
 				? (slidesWindow.currentFile != nil)
 				: numSelected == 1;
+		case RENAME:
+			// renaming operates on a single file
+			return slidesWindow.isMainWindow
+				? (slidesWindow.currentFile &&
+					slidesWindow.currentImageLoaded &&
+					[NSFileManager.defaultManager isDeletableFileAtPath:slidesWindow.currentFile])
+				: numSelected == 1 && frontWindow && frontWindow.currentFilesDeletable;
 		case AUTO_ROTATE:
 			return YES;
 		case GET_INFO:

@@ -47,6 +47,8 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 - (IBAction)copySelectedFiles:(id)sender;
 - (IBAction)copySelectedFilesAgain:(id)sender;
 - (IBAction)moveToTrash:(id)sender;
+- (IBAction)deleteSelectedFilesPermanently:(id)sender;
+- (IBAction)renameSelectedFile:(id)sender;
 - (IBAction)transformJpeg:(id)sender;
 - (IBAction)sortThumbnails:(id)sender;
 - (IBAction)doShowFilenames:(id)sender;
