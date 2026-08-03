@@ -221,13 +221,21 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 }
 
 - (void)setMaxCellWidth:(float)w {
-	if (w < _maxCellWidth) {
-		_maxCellWidth = w; // this has to be set before we do the resizing
-		self.cellWidth = cellWidth < w ? cellWidth : w;
+	float oldMax = _maxCellWidth;
+	_maxCellWidth = w; // has to be set before we resize the cells
+	// Keep the size slider at the same fraction of its range, so a size you
+	// deliberately chose scales with the cap instead of snapping to it. When the
+	// slider was already at the maximum this still lands on the new cap.
+	if (oldMax > MIN_CELL_WIDTH && oldMax < FLT_MAX) {
+		float fraction = (cellWidth - MIN_CELL_WIDTH) / (oldMax - MIN_CELL_WIDTH);
+		self.cellWidth = MIN_CELL_WIDTH + fraction * (w - MIN_CELL_WIDTH);
 	} else {
-		_maxCellWidth = w;
-		// tell delegate to reload anything we've loaded already
-		// the delay is to wait for all the other windows to have emptied the thumbs cache before we start repopulating it
+		self.cellWidth = cellWidth < w ? cellWidth : w; // first pass: just clamp into range
+	}
+	if (w > oldMax) {
+		// Raising the cap: reload anything we've already loaded at the higher
+		// resolution. The delay is to wait for all the other windows to have
+		// emptied the thumbs cache before we start repopulating it.
 		NSUInteger n = filenames.count;
 		if (n && _respondsToLoadImageForFile) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 			for (NSUInteger i = 0; i < n; ++i) {
