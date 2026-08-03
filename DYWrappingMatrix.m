@@ -608,18 +608,9 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 }
 
 #pragma mark instant name tool tips
-// Reveal the full file name on hover, but only when it isn't already fully
-// visible: either the labels are hidden, or the name is too long for its cell
-// and would be drawn truncated with an ellipsis. We draw the tip ourselves in a
-// small borderless window so it appears instantly, without the system tool-tip
-// hover delay (which AppKit re-arms every time the pointer enters a new cell).
-- (BOOL)nameIsClippedAtIndex:(NSUInteger)i {
-	if (textHeight == 0) return YES; // labels hidden: nothing is shown, so reveal it
-	NSString *name = [filenames[i] lastPathComponent];
-	CGFloat textWidth = [name sizeWithAttributes:@{NSFontAttributeName: self.labelFont}].width;
-	return ceil(textWidth) > area_w - 4; // account for the cell's ~2px inset on each side
-}
-
+// Reveal the full file name on hover for every thumbnail. We draw the tip
+// ourselves in a small borderless window so it appears instantly, without the
+// system tool-tip hover delay (which AppKit re-arms on entering each new cell).
 - (void)updateTrackingAreas {
 	[super updateTrackingAreas];
 	if (_nameTipTracking) [self removeTrackingArea:_nameTipTracking];
@@ -633,7 +624,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	[super mouseMoved:e];
 	NSPoint p = [self convertPoint:e.locationInWindow fromView:nil];
 	NSInteger i = [self point2cellnum:p];
-	if (i < 0 || i >= (NSInteger)numCells || !NSPointInRect(p, [self cellnum2rect:i]) || ![self nameIsClippedAtIndex:i])
+	if (i < 0 || i >= (NSInteger)numCells || !NSPointInRect(p, [self cellnum2rect:i]))
 		[self hideNameTip];
 	else
 		[self showNameTip:[filenames[i] lastPathComponent] forCell:i];
@@ -685,13 +676,18 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	NSSize fs = _nameTipField.frame.size;
 	_nameTipField.frameOrigin = NSMakePoint(padX, padY);
 	NSRect wf = NSMakeRect(0, 0, ceil(fs.width) + padX*2, ceil(fs.height) + padY*2);
-	// place just below-right of the cursor, clamped to the screen
-	NSPoint m = NSEvent.mouseLocation;
-	wf.origin = NSMakePoint(m.x + 12, m.y - wf.size.height - 16);
+	// anchor over the hovered cell's file-name label, centered on the cell, so the
+	// popup reads as the truncated label expanded in place
+	NSUInteger row = i / numCols, col = i % numCols;
+	CGFloat stripH = (textHeight ? textHeight : 12) + _vPadding/2;
+	NSRect label = NSMakeRect(area_w*col, area_h*row + area_h - stripH, area_w, stripH);
+	label = [self.window convertRectToScreen:[self convertRect:label toView:nil]];
+	wf.origin.x = round(NSMidX(label) - wf.size.width/2);
+	wf.origin.y = round(NSMidY(label) - wf.size.height/2); // sit directly over the label
 	NSRect vis = (self.window.screen ?: NSScreen.mainScreen).visibleFrame;
 	if (NSMaxX(wf) > NSMaxX(vis)) wf.origin.x = NSMaxX(vis) - wf.size.width;
 	if (wf.origin.x < NSMinX(vis)) wf.origin.x = NSMinX(vis);
-	if (wf.origin.y < NSMinY(vis)) wf.origin.y = m.y + 16; // flip above the cursor near the screen's bottom
+	if (NSMaxY(wf) > NSMaxY(vis)) wf.origin.y = NSMaxY(vis) - wf.size.height; // keep on-screen at the top
 	[_nameTipWindow setFrame:wf display:YES];
 	if (!_nameTipWindow.isVisible)
 		[_nameTipWindow orderFront:nil];
