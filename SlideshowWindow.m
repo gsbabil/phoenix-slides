@@ -570,6 +570,16 @@ scheduledTimerWithTimeInterval:timerIntvl
 	[attStr addAttribute:NSShadowAttributeName
 				   value:shdw
 				   range:r];
+	// scale the EXIF text to the interface text size
+	CGFloat scale = DYInterfaceTextScale();
+	if (scale != 1.0)
+		[attStr enumerateAttribute:NSFontAttributeName inRange:r options:0
+						usingBlock:^(NSFont *font, NSRange range, BOOL *stop) {
+			if (font)
+				[attStr addAttribute:NSFontAttributeName
+							   value:[NSFontManager.sharedFontManager convertFont:font toSize:font.pointSize * scale]
+							   range:range];
+		}];
 	[exifFld replaceCharactersInRange:NSMakeRange(0,exifFld.string.length)
 							  withRTF:[attStr RTFFromRange:NSMakeRange(0,attStr.length)
 										documentAttributes:@{}]];
@@ -869,6 +879,7 @@ scheduledTimerWithTimeInterval:timerIntvl
 	catsFld.font = [NSFont systemFontOfSize:sz];
 	[infoFld sizeToFit];
 	[self updateInfoFld];
+	if (!exifFld.enclosingScrollView.hidden) [self updateExifFld]; // top-right EXIF info
 	// rebuild the cheat sheet at the new size next time it's shown (or now, if visible)
 	BOOL wasVisible = helpFld && !helpFld.hidden;
 	[helpFld removeFromSuperview];

@@ -125,8 +125,8 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 
 CGFloat DYInterfaceTextScale(void) {
 	switch ([NSUserDefaults.standardUserDefaults integerForKey:@"interfaceTextSize"]) {
-		case 1:  return 1.25;
-		case 2:  return 1.5;
+		case 1:  return 1.2;
+		case 2:  return 1.4;
 		default: return 1.0;
 	}
 }

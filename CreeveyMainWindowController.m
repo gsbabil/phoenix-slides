@@ -196,6 +196,10 @@ typedef struct {
 	NSLock *_accessedLock, *_internalLock;
 	_Atomic(NSTimeInterval) _statusTime;
 	DYFileWatcher *_fileWatcher;
+
+	// base (design) font sizes for the controls we scale with the interface text size
+	CGFloat _statusBaseSize, _bottomStatusBaseSize;
+	BOOL _textBasesCaptured;
 }
 @synthesize dirBrowser, slidesBtn, imgMatrix, statusFld, bottomStatusFld;
 
@@ -246,6 +250,7 @@ typedef struct {
 	imgMatrix.loadingImage = _loadingImage;
 	[NSThread detachNewThreadSelector:@selector(thumbLoader:) toTarget:self withObject:nil];
 	[NSUserDefaultsController.sharedUserDefaultsController addObserver:self forKeyPath:@"values.DYWrappingMatrixMaxCellWidth" options:0 context:NULL];
+	[self applyInterfaceTextSize];
 }
 
 - (void)dealloc {
@@ -898,6 +903,20 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 - (void)reloadInterfaceTextSize {
 	[imgMatrix reloadTextSize];
 	[dirBrowser reloadTextSize];
+	[self applyInterfaceTextSize];
+}
+
+// scale the window's status line and file-info line with the interface text
+// size setting. Base sizes are captured once so repeated changes don't compound.
+- (void)applyInterfaceTextSize {
+	if (!_textBasesCaptured) {
+		_statusBaseSize = statusFld.font.pointSize;
+		_bottomStatusBaseSize = bottomStatusFld.font.pointSize;
+		_textBasesCaptured = YES;
+	}
+	CGFloat s = DYInterfaceTextScale();
+	statusFld.font = [NSFont fontWithDescriptor:statusFld.font.fontDescriptor size:_statusBaseSize * s];
+	bottomStatusFld.font = [NSFont fontWithDescriptor:bottomStatusFld.font.fontDescriptor size:_bottomStatusBaseSize * s];
 }
 
 - (void)fakeKeyDown:(NSEvent *)e {
