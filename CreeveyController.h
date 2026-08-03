@@ -12,6 +12,9 @@
 
 NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache *cache, BOOL moreExif);
 
+// Multiplier for interface text (1.0 / 1.25 / 1.5) from the "interfaceTextSize" preference.
+CGFloat DYInterfaceTextScale(void);
+
 #define NUM_FNKEY_CATS 11
 
 @interface CreeveyController : NSObject <NSApplicationDelegate,NSTableViewDataSource,NSWindowRestoration>

@@ -851,6 +851,11 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 
 
 #pragma mark event stuff
+- (void)reloadInterfaceTextSize {
+	[imgMatrix reloadTextSize];
+	[dirBrowser reloadTextSize];
+}
+
 - (void)fakeKeyDown:(NSEvent *)e {
 	[self.window makeFirstResponder:imgMatrix];
 	[imgMatrix keyDown:e];

@@ -178,6 +178,31 @@
                                                 <binding destination="551" name="selectedIndex" keyPath="values.appearance" id="vht-td-m0h"/>
                                             </connections>
                                         </popUpButton>
+                                        <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Txt-s0-lbl">
+                                            <rect key="frame" x="214" y="284" width="66" height="16"/>
+                                            <textFieldCell key="cell" sendsActionOnEndEditing="YES" title="Text size:" id="Txt-s0-cel">
+                                                <font key="font" metaFont="system"/>
+                                                <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                                            </textFieldCell>
+                                        </textField>
+                                        <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Txt-s0-pop">
+                                            <rect key="frame" x="282" y="280" width="105" height="24"/>
+                                            <popUpButtonCell key="cell" type="push" title="Small" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" state="on" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" selectedItem="Txt-s0-sm" id="Txt-s0-pcl">
+                                                <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
+                                                <font key="font" metaFont="message"/>
+                                                <menu key="menu" id="Txt-s0-mnu">
+                                                    <items>
+                                                        <menuItem title="Small" state="on" id="Txt-s0-sm"/>
+                                                        <menuItem title="Medium" id="Txt-s0-md"/>
+                                                        <menuItem title="Large" id="Txt-s0-lg"/>
+                                                    </items>
+                                                </menu>
+                                            </popUpButtonCell>
+                                            <connections>
+                                                <binding destination="551" name="selectedIndex" keyPath="values.interfaceTextSize" id="Txt-s0-bnd"/>
+                                            </connections>
+                                        </popUpButton>
                                         <colorWell translatesAutoresizingMaskIntoConstraints="NO" id="697">
                                             <rect key="frame" x="20" y="246" width="42" height="29"/>
                                             <constraints>

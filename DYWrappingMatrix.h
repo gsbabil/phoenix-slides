@@ -74,6 +74,7 @@
 @property (nonatomic, readonly) float minCellWidth;
 @property (nonatomic) float cellWidth;
 
+- (void)reloadTextSize; // re-apply the interface text size to file-name labels
 @property (nonatomic) BOOL showFilenames;
 @property (nonatomic) BOOL autoRotate;
 

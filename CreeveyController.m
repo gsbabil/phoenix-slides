@@ -122,6 +122,14 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 }
 @end
 
+CGFloat DYInterfaceTextScale(void) {
+	switch ([NSUserDefaults.standardUserDefaults integerForKey:@"interfaceTextSize"]) {
+		case 1:  return 1.25;
+		case 2:  return 1.5;
+		default: return 1.0;
+	}
+}
+
 @interface CreeveyController () <NSMenuItemValidation>
 @property (nonatomic) BOOL appDidFinishLaunching;
 @property (nonatomic) BOOL filesWereOpenedAtLaunch;
@@ -197,6 +205,7 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 		@"startupSlideshowSuppressNewWindows":@NO,
 		@"slideshowDefaultMode":@0,
 		@"MainWindowSplitViewTopHeight":@151.0f,
+		@"interfaceTextSize":@0, // 0 small (current), 1 medium, 2 large
 	}];
 
 	[NSValueTransformer setValueTransformer:[[TimeIntervalPlusWeekToStringTransformer alloc] init]
@@ -270,6 +279,7 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 	[ud addObserver:self forKeyPath:@"values.slideshowWindowFitToImage" options:0 context:NULL];
 	[ud addObserver:self forKeyPath:@"values.DYWrappingMatrixMaxCellWidth" options:0 context:NULL];
 	[ud addObserver:self forKeyPath:@"values.appearance" options:0 context:NULL];
+	[ud addObserver:self forKeyPath:@"values.interfaceTextSize" options:0 context:NULL];
 	localeChangeObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSCurrentLocaleDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
 		[u setDouble:[u doubleForKey:@"lastVersCheckTime"] forKey:@"lastVersCheckTime"];
 	}];
@@ -282,6 +292,7 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 	[u removeObserver:self forKeyPath:@"values.slideshowWindowFitToImage"];
 	[u removeObserver:self forKeyPath:@"values.DYWrappingMatrixMaxCellWidth"];
 	[u removeObserver:self forKeyPath:@"values.appearance"];
+	[u removeObserver:self forKeyPath:@"values.interfaceTextSize"];
 	[NSNotificationCenter.defaultCenter removeObserver:localeChangeObserver];
 	short int i;
 	for (i=0; i<NUM_FNKEY_CATS; ++i)
@@ -1498,6 +1509,10 @@ static void SendAction(NSMenuItem *sender) {
 		[self updateSlideshowFitToImage];
 	} else if ([keyPath isEqualToString:@"values.appearance"]) {
 		[self updateAppearance];
+	} else if ([keyPath isEqualToString:@"values.interfaceTextSize"]) {
+		for (CreeveyMainWindowController *wc in creeveyWindows)
+			[wc reloadInterfaceTextSize];
+		[slidesWindow reloadInterfaceTextSize];
 	}
 }
 

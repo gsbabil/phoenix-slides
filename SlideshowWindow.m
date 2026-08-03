@@ -145,17 +145,26 @@ static BOOL UsingMagicMouse(NSEvent *e) {
 	[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(imgViewResized:) name:NSViewFrameDidChangeNotification object:imgView];
 	imgView.delegate = self;
 	
+	CGFloat infoFontSize = round(NSFont.systemFontSize * DYInterfaceTextScale());
+	// white on a translucent dark background reads well over any image, in Light or Dark
+	NSColor *overlayBg = [NSColor colorWithCalibratedWhite:0.0 alpha:0.55];
 	infoFld = [[NSTextField alloc] initWithFrame:NSMakeRect(0,0,360,20)];
 	[imgView addSubview:infoFld];
 	infoFld.autoresizingMask = NSViewMaxXMargin|NSViewMaxYMargin;
-	infoFld.backgroundColor = NSColor.grayColor;
+	infoFld.drawsBackground = YES;
+	infoFld.backgroundColor = overlayBg;
+	infoFld.textColor = NSColor.whiteColor;
+	infoFld.font = [NSFont systemFontOfSize:infoFontSize];
 	infoFld.bezeled = NO;
 	infoFld.editable = NO;
-	
+
 	catsFld = [[NSTextField alloc] initWithFrame:NSMakeRect(0,imgView.bounds.size.height-20,300,20)];
 	[imgView addSubview:catsFld];
 	catsFld.autoresizingMask = NSViewMaxXMargin|NSViewMinYMargin;
-	catsFld.backgroundColor = NSColor.grayColor;
+	catsFld.drawsBackground = YES;
+	catsFld.backgroundColor = overlayBg;
+	catsFld.textColor = NSColor.whiteColor;
+	catsFld.font = [NSFont systemFontOfSize:infoFontSize];
 	catsFld.bezeled = NO;
 	catsFld.editable = NO; // **
 	catsFld.hidden = YES;
@@ -854,6 +863,19 @@ scheduledTimerWithTimeInterval:timerIntvl
 		[self updateExifFld];
 }
 
+- (void)reloadInterfaceTextSize {
+	CGFloat sz = round(NSFont.systemFontSize * DYInterfaceTextScale());
+	infoFld.font = [NSFont systemFontOfSize:sz];
+	catsFld.font = [NSFont systemFontOfSize:sz];
+	[infoFld sizeToFit];
+	[self updateInfoFld];
+	// rebuild the cheat sheet at the new size next time it's shown (or now, if visible)
+	BOOL wasVisible = helpFld && !helpFld.hidden;
+	[helpFld removeFromSuperview];
+	helpFld = nil;
+	if (wasVisible) [self toggleHelp];
+}
+
 - (void)toggleHelp {
 	if (!helpFld) {
 		helpFld = [[NSTextView alloc] initWithFrame:NSZeroRect];
@@ -863,6 +885,20 @@ scheduledTimerWithTimeInterval:timerIntvl
 			NSLog(@"couldn't load cheat sheet!");
 		helpFld.backgroundColor = NSColor.lightGrayColor;
 		helpFld.selectable = NO;
+		// scale the cheat sheet to the interface text size
+		CGFloat scale = DYInterfaceTextScale();
+		if (scale != 1.0) {
+			NSTextStorage *ts = helpFld.textStorage;
+			[ts beginEditing];
+			[ts enumerateAttribute:NSFontAttributeName inRange:NSMakeRange(0, ts.length) options:0
+						 usingBlock:^(NSFont *font, NSRange range, BOOL *stop) {
+				if (font)
+					[ts addAttribute:NSFontAttributeName
+							   value:[NSFontManager.sharedFontManager convertFont:font toSize:font.pointSize * scale]
+							   range:range];
+			}];
+			[ts endEditing];
+		}
 //		NSLayoutManager *lm = [helpFld layoutManager];
 //		NSRange rnge = [lm glyphRangeForCharacterRange:NSMakeRange(0,[[helpFld textStorage] length])
 //								  actualCharacterRange:NULL];

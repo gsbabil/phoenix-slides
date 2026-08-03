@@ -12,6 +12,8 @@
 #import "NSMutableArray+DYMovable.h"
 #import "NSColor+TextColor.h"
 
+CGFloat DYInterfaceTextScale(void); // defined in CreeveyController.m
+
 #define MAX_EXIF_WIDTH  160
 #define MIN_CELL_WIDTH  40
 #define PADDING 16
@@ -170,7 +172,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 		_originPaths = [[NSMutableArray alloc] init];
 		// cellWidth should be initialized by an external controller during awakeFromNib
 		_maxCellWidth = FLT_MAX;
-		textHeight = DEFAULT_TEXTHEIGHT;
+		textHeight = round(DEFAULT_TEXTHEIGHT * DYInterfaceTextScale());
 		autoRotate = YES;
 		
 		[self registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
@@ -373,7 +375,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 
 	// show/hide filenames
 	if (b) {
-		textHeight = DEFAULT_TEXTHEIGHT;
+		textHeight = round(DEFAULT_TEXTHEIGHT * DYInterfaceTextScale());
 	} else {
 		textHeight = 0;
 	}
@@ -553,6 +555,12 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	}
 }
 
+- (void)reloadTextSize {
+	textHeight = round(DEFAULT_TEXTHEIGHT * DYInterfaceTextScale());
+	[self resize:nil];
+	[self setNeedsDisplay:YES];
+}
+
 - (void)resize:(id)anObject {
 	NSRect myFrame = self.frame;
 	if (anObject) {
@@ -590,7 +598,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	NSRect textCellRect = NSMakeRect(0, 0, area_w, textHeight + _vPadding/2);
 	NSRect cellRect;
 	NSWindow *myWindow = self.window;
-	myTextCell.font = [NSFont systemFontOfSize:cellWidth >= 160 ? 12 : 4+cellWidth/20]; // ranges from 6 to 12: 6 + 6*(cellWidth-40)/(160-40)
+	myTextCell.font = [NSFont systemFontOfSize:(cellWidth >= 160 ? 12 : 4+cellWidth/20) * DYInterfaceTextScale()]; // base ranges 6 to 12, scaled by the interface text size
 	myTextCell.textColor = bgColor.bestTextColor;
 	for (i=0; i<numCells; ++i) {
 		row = i/numCols;

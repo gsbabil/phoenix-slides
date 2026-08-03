@@ -40,6 +40,7 @@
 - (void)updateDefaults;
 - (void)openFiles:(NSArray *)a withSlideshow:(BOOL)b;
 - (void)fakeKeyDown:(NSEvent *)e;
+- (void)reloadInterfaceTextSize;
 
 // notifiers
 - (void)fileWasChanged:(NSString *)s;

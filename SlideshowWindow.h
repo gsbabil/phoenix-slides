@@ -21,6 +21,7 @@
 - (void)startSlideshowAtIndex:(NSUInteger)n;
 - (void)endSlideshow;
 - (void)resetScreen;
+- (void)reloadInterfaceTextSize;
 
 @property (nonatomic, readonly) NSUInteger currentIndex;
 @property (nonatomic, readonly) NSString *currentFile;
