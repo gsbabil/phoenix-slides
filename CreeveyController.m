@@ -103,6 +103,15 @@ NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache 
 }
 @end
 
+// YES only when the interface text size is "Custom" (index 3); used to enable the
+// custom point-size field/stepper in Preferences
+@interface DYTextSizeIsCustomTransformer : NSValueTransformer
+@end
+@implementation DYTextSizeIsCustomTransformer
++ (Class)transformedValueClass { return [NSNumber class]; }
+- (id)transformedValue:(id)v { return @([v integerValue] == 3); }
+@end
+
 static NSString *DYCharacterCountString(NSUInteger n) {
 	return [NSString stringWithFormat:(n == 1 ? NSLocalizedString(@"%lu character", @"")
 											  : NSLocalizedString(@"%lu characters", @"")), (unsigned long)n];
@@ -128,9 +137,14 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 @end
 
 CGFloat DYInterfaceTextScale(void) {
-	switch ([NSUserDefaults.standardUserDefaults integerForKey:@"interfaceTextSize"]) {
+	NSUserDefaults *u = NSUserDefaults.standardUserDefaults;
+	switch ([u integerForKey:@"interfaceTextSize"]) {
 		case 1:  return 1.2;
 		case 2:  return 1.4;
+		case 3: { // custom: a point size relative to the system font (13pt ≈ Small/1.0×)
+			CGFloat pt = MAX(10, MIN(25, [u floatForKey:@"interfaceTextCustomSize"]));
+			return pt / NSFont.systemFontSize;
+		}
 		default: return 1.0;
 	}
 }
@@ -217,11 +231,14 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 		@"startupSlideshowSuppressNewWindows":@NO,
 		@"slideshowDefaultMode":@0,
 		@"MainWindowSplitViewTopHeight":@151.0f,
-		@"interfaceTextSize":@0, // 0 small (current), 1 medium, 2 large
+		@"interfaceTextSize":@0, // 0 small (current), 1 medium, 2 large, 3 custom
+		@"interfaceTextCustomSize":@13, // point size when interfaceTextSize == 3 (custom)
 	}];
 
 	[NSValueTransformer setValueTransformer:[[TimeIntervalPlusWeekToStringTransformer alloc] init]
 									forName:@"TimeIntervalPlusWeekToStringTransformer"];
+	[NSValueTransformer setValueTransformer:[[DYTextSizeIsCustomTransformer alloc] init]
+									forName:@"DYTextSizeIsCustomTransformer"];
 }
 
 - (instancetype)init {
@@ -292,6 +309,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 	[ud addObserver:self forKeyPath:@"values.DYWrappingMatrixMaxCellWidth" options:0 context:NULL];
 	[ud addObserver:self forKeyPath:@"values.appearance" options:0 context:NULL];
 	[ud addObserver:self forKeyPath:@"values.interfaceTextSize" options:0 context:NULL];
+	[ud addObserver:self forKeyPath:@"values.interfaceTextCustomSize" options:0 context:NULL];
 	localeChangeObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSCurrentLocaleDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
 		[u setDouble:[u doubleForKey:@"lastVersCheckTime"] forKey:@"lastVersCheckTime"];
 	}];
@@ -305,6 +323,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 	[u removeObserver:self forKeyPath:@"values.DYWrappingMatrixMaxCellWidth"];
 	[u removeObserver:self forKeyPath:@"values.appearance"];
 	[u removeObserver:self forKeyPath:@"values.interfaceTextSize"];
+	[u removeObserver:self forKeyPath:@"values.interfaceTextCustomSize"];
 	[NSNotificationCenter.defaultCenter removeObserver:localeChangeObserver];
 	short int i;
 	for (i=0; i<NUM_FNKEY_CATS; ++i)
@@ -1554,7 +1573,8 @@ static void SendAction(NSMenuItem *sender) {
 		[self updateSlideshowFitToImage];
 	} else if ([keyPath isEqualToString:@"values.appearance"]) {
 		[self updateAppearance];
-	} else if ([keyPath isEqualToString:@"values.interfaceTextSize"]) {
+	} else if ([keyPath isEqualToString:@"values.interfaceTextSize"]
+			   || [keyPath isEqualToString:@"values.interfaceTextCustomSize"]) {
 		for (CreeveyMainWindowController *wc in creeveyWindows)
 			[wc reloadInterfaceTextSize];
 		[slidesWindow reloadInterfaceTextSize];

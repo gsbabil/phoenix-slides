@@ -196,6 +196,7 @@
                                                         <menuItem title="Small" state="on" id="Txt-s0-sm"/>
                                                         <menuItem title="Medium" id="Txt-s0-md"/>
                                                         <menuItem title="Large" id="Txt-s0-lg"/>
+                                                        <menuItem title="Custom" id="Txt-s0-cst"/>
                                                     </items>
                                                 </menu>
                                             </popUpButtonCell>
@@ -203,6 +204,46 @@
                                                 <binding destination="551" name="selectedIndex" keyPath="values.interfaceTextSize" id="Txt-s0-bnd"/>
                                             </connections>
                                         </popUpButton>
+                                        <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Txt-s0-fld">
+                                            <rect key="frame" x="393" y="281" width="42" height="22"/>
+                                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" sendsActionOnEndEditing="YES" alignment="right" borderStyle="bezel" drawsBackground="YES" id="Txt-s0-fcl">
+                                                <numberFormatter key="formatter" formatterBehavior="default10_4" numberStyle="decimal" maximumFractionDigits="0" id="Txt-s0-fmt">
+                                                    <real key="minimum" value="10"/>
+                                                    <real key="maximum" value="25"/>
+                                                </numberFormatter>
+                                                <font key="font" metaFont="message"/>
+                                                <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                            </textFieldCell>
+                                            <connections>
+                                                <binding destination="551" name="value" keyPath="values.interfaceTextCustomSize" id="Txt-s0-fvb"/>
+                                                <binding destination="551" name="enabled" keyPath="values.interfaceTextSize" id="Txt-s0-feb">
+                                                    <dictionary key="options">
+                                                        <string key="NSValueTransformerName">DYTextSizeIsCustomTransformer</string>
+                                                    </dictionary>
+                                                </binding>
+                                            </connections>
+                                        </textField>
+                                        <stepper verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Txt-s0-stp">
+                                            <rect key="frame" x="438" y="278" width="19" height="27"/>
+                                            <stepperCell key="cell" continuous="YES" alignment="left" increment="1" minValue="10" maxValue="25" doubleValue="13" id="Txt-s0-scl"/>
+                                            <connections>
+                                                <binding destination="551" name="value" keyPath="values.interfaceTextCustomSize" id="Txt-s0-svb"/>
+                                                <binding destination="551" name="enabled" keyPath="values.interfaceTextSize" id="Txt-s0-seb">
+                                                    <dictionary key="options">
+                                                        <string key="NSValueTransformerName">DYTextSizeIsCustomTransformer</string>
+                                                    </dictionary>
+                                                </binding>
+                                            </connections>
+                                        </stepper>
+                                        <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Txt-s0-ptl">
+                                            <rect key="frame" x="460" y="284" width="18" height="16"/>
+                                            <textFieldCell key="cell" sendsActionOnEndEditing="YES" title="pt" id="Txt-s0-pc2">
+                                                <font key="font" metaFont="system"/>
+                                                <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                                            </textFieldCell>
+                                        </textField>
                                         <colorWell translatesAutoresizingMaskIntoConstraints="NO" id="697">
                                             <rect key="frame" x="20" y="246" width="42" height="29"/>
                                             <constraints>
