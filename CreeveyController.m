@@ -135,6 +135,13 @@ CGFloat DYInterfaceTextScale(void) {
 	}
 }
 
+// Run an alert with no window animation, so it pops open instantly instead of
+// fading/scaling in.
+static NSModalResponse DYRunAlert(NSAlert *alert) {
+	alert.window.animationBehavior = NSWindowAnimationBehaviorNone;
+	return [alert runModal];
+}
+
 @interface CreeveyController () <NSMenuItemValidation>
 @property (nonatomic) BOOL appDidFinishLaunching;
 @property (nonatomic) BOOL filesWereOpenedAtLaunch;
@@ -412,7 +419,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 		NSAlert *alert = [[NSAlert alloc] init];
 		alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"Could not set the desktop because an error occurred. %@", @""), error.localizedDescription];
 		[alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"")];
-		[alert runModal];
+		DYRunAlert(alert);
 	};
 }
 
@@ -445,7 +452,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 		alert.informativeText = NSLocalizedString(@"This operation cannot be undone! Are you sure you want to continue?", @"");
 		[alert addButtonWithTitle:NSLocalizedString(@"Continue", @"")];
 		[alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"")];
-		NSModalResponse response = [alert runModal];
+		NSModalResponse response = DYRunAlert(alert);
 		if (response != NSAlertFirstButtonReturn)
 			return; // user cancelled
 		jinfo.preserveModificationDate = jinfo.resetOrientation ? [NSUserDefaults.standardUserDefaults boolForKey:@"jpegPreserveModDate"]
@@ -578,7 +585,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 		} else {
 			alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"%lu files could not be moved because of an error.",@""), notMoved.count];
 		}
-		[alert runModal];
+		DYRunAlert(alert);
 	}
 	_originalPaths = [paths copy];
 	_movedUrls = [moved copy];
@@ -605,7 +612,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 			alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"The file “%@” could not be copied because of an error: %@", @""), notCopied[0].lastPathComponent, err.localizedDescription];
 		else
 			alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"%lu files could not be copied because of an error.", @""), notCopied.count];
-		[alert runModal];
+		DYRunAlert(alert);
 	}
 }
 
@@ -613,6 +620,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	NSOpenPanel *op = [NSOpenPanel openPanel];
 	op.canChooseFiles = NO;
 	op.canChooseDirectories = YES;
+	op.animationBehavior = NSWindowAnimationBehaviorNone;
 	if ([op runModal] != NSModalResponseOK) return;
 	NSURL *dest = op.URL;
 	[self moveSelectedFilesTo:dest];
@@ -630,6 +638,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	NSOpenPanel *op = [NSOpenPanel openPanel];
 	op.canChooseFiles = NO;
 	op.canChooseDirectories = YES;
+	op.animationBehavior = NSWindowAnimationBehaviorNone;
 	if ([op runModal] != NSModalResponseOK) return;
 	NSURL *dest = op.URL;
 	[self copySelectedFilesTo:dest];
@@ -660,7 +669,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	deleteButton.hasDestructiveAction = YES;
 	if (numFiles > 1)
 		[alert addButtonWithTitle:NSLocalizedString(@"Skip", @"after move to trash failed")];
-	NSModalResponse response = [alert runModal];
+	NSModalResponse response = DYRunAlert(alert);
 	if (response == NSAlertFirstButtonReturn)
 		return 2;
 	if (response == NSAlertSecondButtonReturn) {
@@ -670,7 +679,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 		}
 		alert = [[NSAlert alloc] init];
 		alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"The file %@ could not be deleted because an error occurred: %@", @""), fullpath.lastPathComponent, error.localizedDescription];
-		[alert runModal];
+		DYRunAlert(alert);
 	}
 	return 0;
 }
@@ -704,7 +713,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 					} else {
 						NSAlert *alert = [[NSAlert alloc] init];
 						alert.informativeText = [NSString stringWithFormat:doTrash ? NSLocalizedString(@"The file \"%@\" could not be restored from the trash because of an error: %@", @"") : NSLocalizedString(@"The file “%@” could not be moved because of an error: %@", @""), s.lastPathComponent, err.localizedDescription];
-						[alert runModal];
+						DYRunAlert(alert);
 					}
 				}];
 				[um setActionName:[NSString stringWithFormat:doTrash ? NSLocalizedString(@"Move to Trash",@"") : NSLocalizedString(@"Move File",@"for undo")]];
@@ -745,7 +754,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 				if (moved.count < n) {
 					NSAlert *alert = [[NSAlert alloc] init];
 					alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"%lu file(s) could not be restored from the trash because of an error. You should probably check your Trash.",@""), n-moved.count];
-					[alert runModal];
+					DYRunAlert(alert);
 				}
 			}];
 			[um setActionName:[NSString stringWithFormat:NSLocalizedString(@"Move to Trash (%lu File(s))",@"for undo"), n]];
@@ -772,7 +781,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 					if (moved.count < n) {
 						NSAlert *alert = [[NSAlert alloc] init];
 						alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"%lu file(s) could not be moved back because of an error.",@""), n-moved.count];
-						[alert runModal];
+						DYRunAlert(alert);
 					}
 				}];
 				[um setActionName:[NSString stringWithFormat:NSLocalizedString(@"Move Files (%lu File(s))",@"for undo"), n]];
@@ -816,7 +825,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	[alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"")];
 	NSButton *deleteButton = [alert addButtonWithTitle:NSLocalizedString(@"Delete", @"Delete Immediately Button")];
 	deleteButton.hasDestructiveAction = YES;
-	if ([alert runModal] != NSAlertSecondButtonReturn)
+	if (DYRunAlert(alert) != NSAlertSecondButtonReturn)
 		return;
 
 	BOOL slideshowMain = slidesWindow.isMainWindow;
@@ -840,7 +849,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 		alert.informativeText = notDeleted.count == 1
 			? [NSString stringWithFormat:NSLocalizedString(@"The file “%@” could not be deleted because an error occurred.", @""), [notDeleted[0] lastPathComponent]]
 			: [NSString stringWithFormat:NSLocalizedString(@"%lu file(s) could not be deleted because an error occurred.", @""), (unsigned long)notDeleted.count];
-		[alert runModal];
+		DYRunAlert(alert);
 	}
 	if (!slideshowMain) {
 		[frontWindow updateExifInfo];
@@ -957,7 +966,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	[alert addButtonWithTitle:NSLocalizedString(@"Rename", @"")];
 	[alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"")];
 	alert.window.initialFirstResponder = input;
-	if ([alert runModal] != NSAlertFirstButtonReturn) {
+	if (DYRunAlert(alert) != NSAlertFirstButtonReturn) {
 		// cancelled: keep the same image selected in the browser
 		if (!slidesWindow.isMainWindow)
 			[frontWindow.window makeFirstResponder:frontWindow.imageMatrix];
@@ -971,14 +980,14 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	if ([newName containsString:@"/"] || [newName hasPrefix:@"."]) {
 		alert = [[NSAlert alloc] init];
 		alert.informativeText = NSLocalizedString(@"File names cannot contain “/” or begin with a period.", @"");
-		[alert runModal];
+		DYRunAlert(alert);
 		return;
 	}
 	NSString *newPath = [oldPath.stringByDeletingLastPathComponent stringByAppendingPathComponent:newName];
 	if ([NSFileManager.defaultManager fileExistsAtPath:newPath]) {
 		alert = [[NSAlert alloc] init];
 		alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"An item named “%@” already exists in this location.", @""), newName];
-		[alert runModal];
+		DYRunAlert(alert);
 		return;
 	}
 
@@ -1005,7 +1014,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	if (![NSFileManager.defaultManager moveItemAtPath:oldPath toPath:newPath error:&err]) {
 		NSAlert *alert = [[NSAlert alloc] init];
 		alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"The file “%@” could not be renamed because of an error: %@", @""), oldPath.lastPathComponent, err.localizedDescription];
-		[alert runModal];
+		DYRunAlert(alert);
 		return;
 	}
 	[self fileWasRenamedFrom:oldPath to:newPath];
