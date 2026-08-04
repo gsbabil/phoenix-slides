@@ -437,17 +437,51 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 // Forward the arrow keys to the grid so it tracks the panel in lock-step;
 // closing Quick Look then leaves the browsed image selected (Finder-style).
 - (BOOL)previewPanel:(QLPreviewPanel *)panel handleEvent:(NSEvent *)event {
-	if (event.type == NSEventTypeKeyDown && event.characters.length) {
-		unichar c = [event.characters characterAtIndex:0];
-		if (c == NSLeftArrowFunctionKey || c == NSRightArrowFunctionKey ||
-			c == NSUpArrowFunctionKey || c == NSDownArrowFunctionKey) {
-			[imgMatrix keyDown:event];
-			NSUInteger sel = imgMatrix.selectedIndexes.firstIndex;
-			if (sel != NSNotFound) panel.currentPreviewItemIndex = sel;
-			return YES;
-		}
+	if (event.type != NSEventTypeKeyDown || event.characters.length == 0) return NO;
+	unichar c = [event.characters characterAtIndex:0];
+	// arrow keys: move the grid selection and keep the panel in sync
+	if (c == NSLeftArrowFunctionKey || c == NSRightArrowFunctionKey ||
+		c == NSUpArrowFunctionKey || c == NSDownArrowFunctionKey) {
+		[imgMatrix keyDown:event];
+		NSUInteger sel = imgMatrix.selectedIndexes.firstIndex;
+		if (sel != NSNotFound) panel.currentPreviewItemIndex = sel;
+		return YES;
+	}
+	NSEventModifierFlags mods = event.modifierFlags &
+		(NSEventModifierFlagCommand|NSEventModifierFlagControl|NSEventModifierFlagOption);
+	if (mods == 0) {
+		// unmodified single-key browser actions (trash / delete / rename), per the
+		// config; leave Space, Esc, Return, etc. for Quick Look itself
+		if ([appDelegate.keyBindings browserActionForEvent:event] == BrowserActionNone)
+			return NO;
+		[self keyDown:event];
+		[self reloadQuickLook:panel];
+		return YES;
+	}
+	// keep window/app-management keys with Quick Look and the system, so the browser
+	// window isn't closed/minimized/hidden out from under the preview
+	if ((mods & NSEventModifierFlagCommand) && event.charactersIgnoringModifiers.length == 1
+		&& [@"wmhqnt" containsString:event.charactersIgnoringModifiers.lowercaseString])
+		return NO;
+	// forward every other shortcut to the app's menu (Get Info, Reveal, Rotate, Set
+	// Desktop, Move/Copy To, Sort, …), then refresh in case the file list changed
+	if ([NSApp.mainMenu performKeyEquivalent:event]) {
+		[self reloadQuickLook:panel];
+		return YES;
 	}
 	return NO;
+}
+
+// after a Quick Look action that may have trashed/renamed/reordered files, refresh
+// the panel and follow the grid selection (or close the panel if nothing remains)
+- (void)reloadQuickLook:(QLPreviewPanel *)panel {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		if (!panel.isVisible) return;
+		if (displayedFilenames.count == 0) { [panel orderOut:nil]; return; }
+		[panel reloadData];
+		NSUInteger sel = imgMatrix.selectedIndexes.firstIndex;
+		panel.currentPreviewItemIndex = (sel == NSNotFound) ? 0 : MIN(sel, displayedFilenames.count - 1);
+	});
 }
 
 // zoom the panel open from (and closed to) the thumbnail, for immediate feedback
