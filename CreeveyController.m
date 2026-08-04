@@ -42,42 +42,46 @@ static BOOL FilesContainJPEG(NSArray *paths) {
 #define TAB(x,y)	[[NSTextTab alloc] initWithType:x location:y]
 NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache *cache, BOOL moreExif) {
 	NSString *path = ResolveAliasToPath(origPath);
-	NSMutableString *s = [[NSMutableString alloc] init];
-	[s appendString:origPath.lastPathComponent];
+	// header = file name (+ alias) + size + dimensions; these are plain lines
+	NSMutableString *header = [origPath.lastPathComponent mutableCopy];
 	if (path != origPath)
-		[s appendFormat:@"\n[%@->%@]", NSLocalizedString(@"Alias", @""), path];
+		[header appendFormat:@"\n[%@->%@]", NSLocalizedString(@"Alias", @""), path];
 	DYImageInfo *i = [cache infoForKey:path];
+	NSString *exifStr = nil;
 	if (i) {
-		id exifStr = [DYExiftags tagsForFile:path moreTags:moreExif];
-		[s appendFormat:@"\n%@ (%qu bytes)\n%@: %d %@: %d",
+		exifStr = [DYExiftags tagsForFile:path moreTags:moreExif];
+		[header appendFormat:@"\n%@ (%qu bytes)\n%@: %d %@: %d",
 			FileSize2String(i->fileSize), i->fileSize,
 			NSLocalizedString(@"Width", @""), (int)i->pixelSize.width,
 			NSLocalizedString(@"Height", @""), (int)i->pixelSize.height];
-		if (exifStr) {
-			[s appendString:@"\n"];
-			[s appendString:exifStr];
-		}
 	} else {
 		unsigned long long fsize;
 		fsize = [[NSFileManager.defaultManager attributesOfItemAtPath:path.stringByResolvingSymlinksInPath error:NULL] fileSize];
 		// fsize will be 0 on error
-		[s appendFormat:@"\n%@ (%qu bytes)",
-			FileSize2String(fsize), fsize];
+		[header appendFormat:@"\n%@ (%qu bytes)", FileSize2String(fsize), fsize];
 	}
-	
-	static NSDictionary *atts;
-	if (atts == nil) {
+
+	static NSDictionary *headerAtts, *exifAtts;
+	if (headerAtts == nil) {
+		NSFont *font = [NSFont userFontOfSize:12];
+		// header: plain and left-aligned, so a long file name that wraps stays at
+		// the margin instead of indenting under the EXIF value column
+		headerAtts = @{
+			NSFontAttributeName: font,
+			NSParagraphStyleAttributeName: [[NSMutableParagraphStyle alloc] init],
+		};
+		// EXIF tags: two columns (label tab value); wrapped values align at the value column
 		float x = 160;
 		NSMutableParagraphStyle *styl = [[NSMutableParagraphStyle alloc] init];
 		styl.headIndent = x;
 		styl.tabStops = @[TAB(NSRightTabStopType,x-5), TAB(NSLeftTabStopType,x)];
 		styl.defaultTabInterval = 5;
-		atts = @{
-			NSFontAttributeName: [NSFont userFontOfSize:12],
-			NSParagraphStyleAttributeName: styl,
-		};
+		exifAtts = @{ NSFontAttributeName: font, NSParagraphStyleAttributeName: styl };
 	}
-	return [[NSMutableAttributedString alloc] initWithString:s attributes:atts];
+	NSMutableAttributedString *out = [[NSMutableAttributedString alloc] initWithString:header attributes:headerAtts];
+	if (exifStr)
+		[out appendAttributedString:[[NSAttributedString alloc] initWithString:[@"\n" stringByAppendingString:exifStr] attributes:exifAtts]];
+	return out;
 }
 
 @interface TimeIntervalPlusWeekToStringTransformer : NSValueTransformer
