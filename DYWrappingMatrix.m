@@ -317,6 +317,15 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 										 cellWidth, cellHeight)); // rect for cell only
 }
 
+// a cell's thumbnail rect in screen coordinates (for the Quick Look zoom
+// animation), or NSZeroRect if the cell is scrolled out of view
+- (NSRect)screenRectForCellAtIndex:(NSUInteger)n {
+	if (n >= numCells) return NSZeroRect;
+	NSRect r = [self imageRectForIndex:n];
+	if (!NSIntersectsRect(r, self.visibleRect)) return NSZeroRect;
+	return [self.window convertRectToScreen:[self convertRect:r toView:nil]];
+}
+
 - (void)selectionNeedsDisplay:(NSUInteger)n {
 	NSUInteger row, col;
 	row = n/numCols;

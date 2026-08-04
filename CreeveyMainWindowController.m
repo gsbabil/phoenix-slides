@@ -450,6 +450,13 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	return NO;
 }
 
+// zoom the panel open from (and closed to) the thumbnail, for immediate feedback
+- (NSRect)previewPanel:(QLPreviewPanel *)panel sourceFrameOnScreenForPreviewItem:(id <QLPreviewItem>)item {
+	NSInteger idx = panel.currentPreviewItemIndex;
+	if (idx < 0 || idx >= (NSInteger)displayedFilenames.count) return NSZeroRect;
+	return [imgMatrix screenRectForCellAtIndex:idx];
+}
+
 - (void)openFiles:(NSArray *)a withSlideshow:(BOOL)doSlides{
 	startSlideshowWhenReady = doSlides;
 	[filesBeingOpened addObjectsFromArray:a];
@@ -1161,6 +1168,9 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	DYMatrixState *currState = [[DYMatrixState alloc] init];
 	while (YES) {
 		@autoreleasepool {
+			// decode at higher priority for the window the user is looking at, and
+			// lower for background windows, so the visible grid fills in first
+			NSThread.currentThread.qualityOfService = _background ? NSQualityOfServiceUtility : NSQualityOfServiceUserInitiated;
 			// all calls to the thumbnail view must be on the main thread, which we wait for synchronously
 			// to avoid a deadlock (where the view's drawRect calls our loadImageForFile, which modifies the cache queue),
 			// we save the state of the view before acquiring the lock (we can't use NSRecursiveLock since we need NSConditionLock)
