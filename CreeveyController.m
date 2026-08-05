@@ -136,6 +136,174 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 }
 @end
 
+#pragma mark Go to Folder sheet
+// A Finder-style "Go to the folder:" sheet: a path field with ~ expansion and a
+// list of matching sub-folders below. Enter goes to the typed path (or the
+// selected match); Tab / double-click completes; Esc cancels. Directories only.
+@interface DYGoToFolderController : NSObject <NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate>
+@end
+@implementation DYGoToFolderController {
+	NSWindow *_parent, *_sheet;
+	NSTextField *_field;
+	NSTableView *_table;
+	NSMutableArray<NSString *> *_matches;
+	void (^_completion)(NSString *);
+	BOOL _userPickedRow; // YES once the user arrows/clicks a row, so Enter honors it
+}
+static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their sheet is up
+
++ (void)presentForWindow:(NSWindow *)parent startingPath:(NSString *)start completion:(void(^)(NSString *))completion {
+	DYGoToFolderController *c = [[DYGoToFolderController alloc] init];
+	c->_parent = parent;
+	c->_completion = [completion copy];
+	c->_matches = [NSMutableArray array];
+	[c presentStartingAt:start];
+}
+
+- (void)presentStartingAt:(NSString *)start {
+	if (!_dyGoToFolderLive) _dyGoToFolderLive = [NSMutableArray array];
+	[_dyGoToFolderLive addObject:self];
+
+	_sheet = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 560, 300)
+										 styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+	NSView *cv = _sheet.contentView;
+
+	NSTextField *label = [NSTextField labelWithString:NSLocalizedString(@"Go to the folder:", @"")];
+	label.frame = NSMakeRect(20, 268, 520, 17);
+	[cv addSubview:label];
+
+	_field = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 238, 520, 24)];
+	_field.delegate = self;
+	_field.stringValue = start ?: @"~/";
+	[cv addSubview:_field];
+
+	NSScrollView *sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(20, 52, 520, 178)];
+	sv.hasVerticalScroller = YES;
+	sv.borderType = NSBezelBorder;
+	_table = [[NSTableView alloc] initWithFrame:sv.bounds];
+	NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:@"path"];
+	col.width = 500;
+	[_table addTableColumn:col];
+	_table.headerView = nil;
+	_table.dataSource = self;
+	_table.delegate = self;
+	_table.target = self;
+	_table.action = @selector(rowClicked:);
+	_table.doubleAction = @selector(accept:);
+	sv.documentView = _table;
+	[cv addSubview:sv];
+
+	NSButton *cancel = [NSButton buttonWithTitle:NSLocalizedString(@"Cancel", @"") target:self action:@selector(cancel:)];
+	cancel.frame = NSMakeRect(366, 12, 90, 32);
+	[cv addSubview:cancel];
+	NSButton *go = [NSButton buttonWithTitle:NSLocalizedString(@"Go", @"") target:self action:@selector(accept:)];
+	go.frame = NSMakeRect(458, 12, 84, 32);
+	[cv addSubview:go];
+
+	_sheet.initialFirstResponder = _field;
+	[self updateMatches];
+	[_parent beginSheet:_sheet completionHandler:^(NSModalResponse r){}];
+	_field.currentEditor.selectedRange = NSMakeRange(_field.stringValue.length, 0);
+}
+
+- (void)finishWithPath:(NSString *)path {
+	void (^completion)(NSString *) = _completion;
+	[_parent endSheet:_sheet];
+	[_dyGoToFolderLive removeObject:self];
+	if (completion) completion(path);
+}
+
+- (void)cancel:(id)sender { [self finishWithPath:nil]; }
+
+- (void)accept:(id)sender {
+	NSString *chosen = nil;
+	BOOL haveRow = _table.selectedRow >= 0 && _table.selectedRow < (NSInteger)_matches.count;
+	if (_userPickedRow && haveRow) {
+		chosen = _matches[_table.selectedRow]; // a folder you arrowed/clicked to wins
+	} else {
+		NSFileManager *fm = NSFileManager.defaultManager;
+		NSString *typed = _field.stringValue.stringByExpandingTildeInPath;
+		BOOL isDir;
+		if (typed.length && [fm fileExistsAtPath:typed isDirectory:&isDir] && isDir)
+			chosen = typed; // otherwise the typed path wins if it's a real directory
+		else if (haveRow)
+			chosen = _matches[_table.selectedRow];
+	}
+	if (chosen) [self finishWithPath:chosen];
+	else NSBeep();
+}
+
+- (void)updateMatches {
+	NSString *raw = _field.stringValue;
+	NSString *text = raw.stringByExpandingTildeInPath;
+	NSString *dir, *prefix;
+	// expanding ~ strips a trailing slash, so test the raw text for it: a trailing
+	// slash means "list everything in this folder" (empty prefix)
+	if (raw.length == 0)           { dir = NSHomeDirectory(); prefix = @""; }
+	else if ([raw hasSuffix:@"/"]) { dir = text; prefix = @""; }
+	else                           { dir = text.stringByDeletingLastPathComponent; prefix = text.lastPathComponent; }
+	_field.toolTip = text; // the field scrolls with the caret; show the full path on hover
+	[_matches removeAllObjects];
+	NSFileManager *fm = NSFileManager.defaultManager;
+	NSString *lp = prefix.lowercaseString;
+	BOOL showHidden = [prefix hasPrefix:@"."]; // reveal dot-folders once the user types a dot
+	for (NSString *name in [fm contentsOfDirectoryAtPath:dir error:NULL]) {
+		if (!showHidden && [name hasPrefix:@"."]) continue;
+		if (lp.length && ![name.lowercaseString hasPrefix:lp]) continue;
+		NSString *full = [dir stringByAppendingPathComponent:name];
+		BOOL isDir;
+		if ([fm fileExistsAtPath:full isDirectory:&isDir] && isDir)
+			[_matches addObject:full];
+	}
+	[_matches sortUsingComparator:^NSComparisonResult(NSString *a, NSString *b){
+		return [a.lastPathComponent localizedStandardCompare:b.lastPathComponent];
+	}];
+	[_table reloadData];
+	if (_matches.count)
+		[_table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+}
+
+- (void)moveSelectionBy:(NSInteger)delta {
+	if (!_matches.count) return;
+	_userPickedRow = YES;
+	NSInteger row = _table.selectedRow + delta;
+	if (row < 0) row = 0; else if (row >= (NSInteger)_matches.count) row = _matches.count - 1;
+	[_table selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
+	[_table scrollRowToVisible:row];
+}
+
+- (void)completeSelection {
+	if (_table.selectedRow < 0 || _table.selectedRow >= (NSInteger)_matches.count) return;
+	_field.stringValue = [_matches[_table.selectedRow].stringByAbbreviatingWithTildeInPath stringByAppendingString:@"/"];
+	_field.currentEditor.selectedRange = NSMakeRange(_field.stringValue.length, 0);
+	_userPickedRow = NO; // drilled in: back to typed-path mode for the new folder
+	[self updateMatches];
+}
+
+- (void)rowClicked:(id)sender { _userPickedRow = YES; }
+
+- (void)controlTextDidChange:(NSNotification *)n { _userPickedRow = NO; [self updateMatches]; }
+
+- (BOOL)control:(NSControl *)control textView:(NSTextView *)tv doCommandBySelector:(SEL)sel {
+	if (sel == @selector(insertNewline:))    { [self accept:nil];        return YES; }
+	if (sel == @selector(cancelOperation:))  { [self cancel:nil];        return YES; }
+	if (sel == @selector(moveDown:))         { [self moveSelectionBy:1];  return YES; }
+	if (sel == @selector(moveUp:))           { [self moveSelectionBy:-1]; return YES; }
+	if (sel == @selector(insertTab:))        { [self completeSelection];  return YES; }
+	if (sel == @selector(moveRight:)) { // → completes the highlighted folder, but only
+		// at the end of the text so mid-text editing still moves the caret
+		if (NSMaxRange(tv.selectedRange) >= tv.string.length) { [self completeSelection]; return YES; }
+		return NO;
+	}
+	return NO;
+}
+
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return _matches.count; }
+- (id)tableView:(NSTableView *)t objectValueForTableColumn:(NSTableColumn *)c row:(NSInteger)row {
+	return _matches[row].stringByAbbreviatingWithTildeInPath;
+}
+@end
+
 CGFloat DYInterfaceTextScale(void) {
 	NSUserDefaults *u = NSUserDefaults.standardUserDefaults;
 	switch ([u integerForKey:@"interfaceTextSize"]) {
@@ -1277,6 +1445,7 @@ enum {
 	RENAME,
 	DELETE_PERMANENTLY,
 	QUICK_LOOK = 20, // 18=New Window, 19=Select None (tags live only in MainMenu.xib)
+	GO_TO_FOLDER = 24, // 21=Preferences, 22=End Slideshow, 23=Cheat Sheet (tags in MainMenu.xib)
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -1368,6 +1537,8 @@ enum {
 			// so it won't hijack SPACE in the slideshow, Prefs, or text fields
 			if (slidesWindow.isMainWindow) return NO;
 			return numSelected > 0 && frontWindow && frontWindow.window.isMainWindow && frontWindow.filenamesDone;
+		case GO_TO_FOLDER:
+			return !slidesWindow.isMainWindow && frontWindow != nil;
 		case SET_DESKTOP:
 			return slidesWindow.isMainWindow
 				? (slidesWindow.currentFile != nil)
@@ -1439,6 +1610,15 @@ enum {
 }
 
 #pragma mark prefs stuff
+- (IBAction)goToFolder:(id)sender {
+	CreeveyMainWindowController *wc = frontWindow;
+	if (!wc) return;
+	NSString *start = wc.path.length ? [wc.path.stringByAbbreviatingWithTildeInPath stringByAppendingString:@"/"] : @"~/";
+	[DYGoToFolderController presentForWindow:wc.window startingPath:start completion:^(NSString *chosen){
+		if (chosen) [wc setPath:chosen];
+	}];
+}
+
 - (IBAction)openPrefWin:(id)sender {
 	if (!prefsWin) {
 		NSArray * __autoreleasing arr;

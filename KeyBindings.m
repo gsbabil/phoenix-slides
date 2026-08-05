@@ -17,6 +17,7 @@ typedef struct { const char *actionId; NSInteger tag; } DYMenuActionDef;
 static const DYMenuActionDef kMenuActions[] = {
 	{"menu.newWindow",         18},  // tag added in MainMenu.xib
 	{"menu.newTab",            10},
+	{"menu.goToFolder",        24},  // tag added in MainMenu.xib
 	{"menu.quickLook",         20},  // tag added in MainMenu.xib
 	{"menu.beginSlideshow",     4},
 	{"menu.beginSlideshowInWindow", 11},

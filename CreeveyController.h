@@ -63,6 +63,7 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 
 // prefs stuff
 - (IBAction)openPrefWin:(id)sender;
+- (IBAction)goToFolder:(id)sender;
 - (IBAction)chooseStartupDir:(id)sender;
 - (IBAction)applySlideshowPrefs:(id)sender;
 - (IBAction)slideshowDefaultsChanged:(id)sender;

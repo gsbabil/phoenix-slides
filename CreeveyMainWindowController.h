@@ -21,6 +21,7 @@
 
 // accessors
 @property (nonatomic, readonly) NSString *path;
+- (BOOL)setPath:(NSString *)s; // navigate the directory browser to a folder; NO if invalid
 @property (nonatomic, readonly) NSURL *URL;
 @property (nonatomic, readonly) NSArray *currentSelection;
 @property (nonatomic, readonly) NSIndexSet *selectedIndexes;
