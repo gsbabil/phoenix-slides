@@ -146,9 +146,12 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 	NSWindow *_parent, *_sheet;
 	NSTextField *_field;
 	NSTableView *_table;
+	NSProgressIndicator *_spinner; // shown while a slow folder is scanned in the background
 	NSMutableArray<NSString *> *_matches;
 	void (^_completion)(NSString *);
 	BOOL _userPickedRow; // YES once the user arrows/clicks a row, so Enter honors it
+	NSUInteger _scanToken; // bumped per scan so a stale background result can be discarded
+	BOOL _scanning;        // YES while the current scan is still running
 }
 static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their sheet is up
 
@@ -192,6 +195,11 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 	_table.doubleAction = @selector(accept:);
 	sv.documentView = _table;
 	[cv addSubview:sv];
+
+	_spinner = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(NSMidX(sv.frame)-10, NSMidY(sv.frame)-10, 20, 20)];
+	_spinner.style = NSProgressIndicatorStyleSpinning;
+	_spinner.displayedWhenStopped = NO; // only visible while animating
+	[cv addSubview:_spinner];
 
 	NSButton *cancel = [NSButton buttonWithTitle:NSLocalizedString(@"Cancel", @"") target:self action:@selector(cancel:)];
 	cancel.frame = NSMakeRect(366, 12, 90, 32);
@@ -243,24 +251,40 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 	else if ([raw hasSuffix:@"/"]) { dir = text; prefix = @""; }
 	else                           { dir = text.stringByDeletingLastPathComponent; prefix = text.lastPathComponent; }
 	_field.toolTip = text; // the field scrolls with the caret; show the full path on hover
-	[_matches removeAllObjects];
-	NSFileManager *fm = NSFileManager.defaultManager;
 	NSString *lp = prefix.lowercaseString;
 	BOOL showHidden = [prefix hasPrefix:@"."]; // reveal dot-folders once the user types a dot
-	for (NSString *name in [fm contentsOfDirectoryAtPath:dir error:NULL]) {
-		if (!showHidden && [name hasPrefix:@"."]) continue;
-		if (lp.length && ![name.lowercaseString hasPrefix:lp]) continue;
-		NSString *full = [dir stringByAppendingPathComponent:name];
-		BOOL isDir;
-		if ([fm fileExistsAtPath:full isDirectory:&isDir] && isDir)
-			[_matches addObject:full];
-	}
-	[_matches sortUsingComparator:^NSComparisonResult(NSString *a, NSString *b){
-		return [a.lastPathComponent localizedStandardCompare:b.lastPathComponent];
-	}];
-	[_table reloadData];
-	if (_matches.count)
-		[_table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+	// Scan in the background: a folder with many entries needs a stat() per item, which
+	// would otherwise freeze the sheet. A token discards results from superseded scans.
+	NSUInteger token = ++_scanToken;
+	_scanning = YES;
+	// only reveal the spinner if the scan is slow enough to notice, so typing doesn't flash it
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+		if (self->_scanning && token == self->_scanToken) [self->_spinner startAnimation:nil];
+	});
+	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+		NSFileManager *fm = [[NSFileManager alloc] init]; // a private instance is thread-safe
+		NSMutableArray<NSString *> *found = [NSMutableArray array];
+		for (NSString *name in [fm contentsOfDirectoryAtPath:dir error:NULL]) {
+			if (!showHidden && [name hasPrefix:@"."]) continue;
+			if (lp.length && ![name.lowercaseString hasPrefix:lp]) continue;
+			NSString *full = [dir stringByAppendingPathComponent:name];
+			BOOL isDir;
+			if ([fm fileExistsAtPath:full isDirectory:&isDir] && isDir)
+				[found addObject:full];
+		}
+		[found sortUsingComparator:^NSComparisonResult(NSString *a, NSString *b){
+			return [a.lastPathComponent localizedStandardCompare:b.lastPathComponent];
+		}];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (token != self->_scanToken) return; // a newer scan superseded this one
+			self->_scanning = NO;
+			[self->_spinner stopAnimation:nil];
+			[self->_matches setArray:found];
+			[self->_table reloadData];
+			if (self->_matches.count)
+				[self->_table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+		});
+	});
 }
 
 - (void)moveSelectionBy:(NSInteger)delta {
