@@ -200,6 +200,11 @@ typedef struct {
 	// base (design) font sizes for the controls we scale with the interface text size
 	CGFloat _statusBaseSize, _bottomStatusBaseSize;
 	BOOL _textBasesCaptured;
+
+	NSPathControl *_pathControl;         // Finder-style path bar at the bottom
+	NSLayoutConstraint *_pathBarHeight;  // toggled between a row height and 0 to show/hide
+	CGFloat _savedBrowserHeight;         // last non-zero directory-browser height, for restore
+	BOOL _togglingBrowser;               // set while show/hide runs, to protect _savedBrowserHeight
 }
 @synthesize dirBrowser, slidesBtn, imgMatrix, statusFld, bottomStatusFld;
 
@@ -251,6 +256,101 @@ typedef struct {
 	[NSThread detachNewThreadSelector:@selector(thumbLoader:) toTarget:self withObject:nil];
 	[NSUserDefaultsController.sharedUserDefaultsController addObserver:self forKeyPath:@"values.DYWrappingMatrixMaxCellWidth" options:0 context:NULL];
 	[self applyInterfaceTextSize];
+	[self setupPathBar];
+}
+
+#pragma mark path bar
+// Add a Finder-style NSPathControl across the bottom of the window and re-pin the
+// split view's bottom to it (it was pinned to the window's bottom).
+- (void)setupPathBar {
+	NSScrollView *scroll = imgMatrix.enclosingScrollView; // the thumbnail grid's scroll view
+	NSView *pane = scroll.superview;                       // the split view's bottom pane
+	NSView *status = bottomStatusFld;                      // the file-info + slider row
+	_pathControl = [[NSPathControl alloc] initWithFrame:NSZeroRect];
+	_pathControl.translatesAutoresizingMaskIntoConstraints = NO;
+	_pathControl.pathStyle = NSPathStyleStandard;
+	_pathControl.focusRingType = NSFocusRingTypeNone;
+	_pathControl.target = self;
+	_pathControl.action = @selector(pathBarClicked:);
+	[pane addSubview:_pathControl positioned:NSWindowBelow relativeTo:status];
+	// the status row's top is pinned to the grid's bottom; slot the path bar between them
+	for (NSLayoutConstraint *c in pane.constraints.copy) {
+		BOOL statusToGrid =
+			(c.firstItem == status && c.firstAttribute == NSLayoutAttributeTop && c.secondItem == scroll) ||
+			(c.firstItem == scroll && c.firstAttribute == NSLayoutAttributeBottom && c.secondItem == status);
+		if (statusToGrid) { c.active = NO; break; }
+	}
+	_pathBarHeight = [_pathControl.heightAnchor constraintEqualToConstant:0];
+	[NSLayoutConstraint activateConstraints:@[
+		[_pathControl.leadingAnchor constraintEqualToAnchor:pane.leadingAnchor],
+		[_pathControl.trailingAnchor constraintEqualToAnchor:pane.trailingAnchor],
+		[_pathControl.topAnchor constraintEqualToAnchor:scroll.bottomAnchor],
+		[status.topAnchor constraintEqualToAnchor:_pathControl.bottomAnchor constant:1],
+		_pathBarHeight,
+	]];
+	[self setPathBarVisible:[NSUserDefaults.standardUserDefaults boolForKey:@"showPathBar"]];
+}
+
+- (void)updatePathBar {
+	if (_pathControl.hidden) return;
+	NSString *p = self.path;
+	_pathControl.URL = p.length ? [NSURL fileURLWithPath:p] : nil;
+}
+
+- (void)pathBarClicked:(NSPathControl *)sender {
+	NSURL *u = sender.clickedPathItem.URL;
+	if (!u) return;
+	if (NSApp.currentEvent.modifierFlags & NSEventModifierFlagShift)
+		[self showSubfolderMenuForURL:u inControl:sender]; // Finder-style: list that folder's sub-folders
+	else
+		[self setPath:u.path];
+}
+
+- (void)showSubfolderMenuForURL:(NSURL *)dir inControl:(NSPathControl *)control {
+	NSFileManager *fm = NSFileManager.defaultManager;
+	NSArray<NSURL *> *contents = [fm contentsOfDirectoryAtURL:dir
+								  includingPropertiesForKeys:@[NSURLIsDirectoryKey]
+													 options:NSDirectoryEnumerationSkipsHiddenFiles error:NULL];
+	NSMutableArray<NSURL *> *subdirs = [NSMutableArray array];
+	for (NSURL *u in contents) {
+		NSNumber *isDir = nil;
+		[u getResourceValue:&isDir forKey:NSURLIsDirectoryKey error:NULL];
+		if (isDir.boolValue) [subdirs addObject:u];
+	}
+	[subdirs sortUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b){
+		return [a.lastPathComponent localizedStandardCompare:b.lastPathComponent];
+	}];
+	NSMenu *menu = [[NSMenu alloc] init];
+	for (NSURL *u in subdirs) {
+		NSMenuItem *mi = [[NSMenuItem alloc] initWithTitle:u.lastPathComponent
+													action:@selector(goToSubfolder:) keyEquivalent:@""];
+		mi.target = self;
+		mi.representedObject = u.path;
+		NSImage *icon = [NSWorkspace.sharedWorkspace iconForFile:u.path];
+		icon.size = NSMakeSize(16, 16);
+		mi.image = icon;
+		[menu addItem:mi];
+	}
+	if (menu.numberOfItems == 0) {
+		NSMenuItem *none = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"No Folders", @"") action:NULL keyEquivalent:@""];
+		none.enabled = NO;
+		[menu addItem:none];
+	}
+	NSEvent *e = NSApp.currentEvent;
+	NSPoint p = e ? [control convertPoint:e.locationInWindow fromView:nil] : NSMakePoint(0, control.bounds.size.height);
+	[menu popUpMenuPositioningItem:nil atLocation:p inView:control];
+}
+
+- (void)goToSubfolder:(NSMenuItem *)sender {
+	[self setPath:sender.representedObject];
+}
+
+- (BOOL)pathBarVisible { return _pathBarHeight.constant > 0; }
+
+- (void)setPathBarVisible:(BOOL)b {
+	_pathBarHeight.constant = b ? 24 : 0;
+	_pathControl.hidden = !b;
+	[self updatePathBar];
 }
 
 - (void)dealloc {
@@ -899,6 +999,7 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	}
 	[self updateStatusString:NSLocalizedString(@"Getting filenames...", @"")];
 	[self.window setTitleWithRepresentedFilename:currentPath];
+	[self updatePathBar];
 	[NSThread detachNewThreadSelector:@selector(loadImages:)
 							 toTarget:self withObject:currentPath];
 }
@@ -1097,6 +1198,27 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 {
 	float height = statusFld.superview.hidden ? 0 : statusFld.superview.frame.size.height;
 	[NSUserDefaults.standardUserDefaults setFloat:height forKey:@"MainWindowSplitViewTopHeight"];
+	// remember heights from real user drags only; the show/hide toggle sets _togglingBrowser
+	// so the intermediate resize as the pane clamps to its minimum can't clobber the saved size
+	if (height > 0 && !_togglingBrowser) _savedBrowserHeight = height;
+}
+
+- (BOOL)directoryBrowserVisible {
+	return ![self.splitView isSubviewCollapsed:dirBrowser.superview];
+}
+
+- (void)setDirectoryBrowserVisible:(BOOL)b {
+	if (b == self.directoryBrowserVisible) return;
+	_togglingBrowser = YES; // guard _savedBrowserHeight against the collapse's own resize passes
+	if (b) {
+		CGFloat h = _savedBrowserHeight > 0 ? _savedBrowserHeight : 151;
+		[self.splitView setPosition:h ofDividerAtIndex:0];
+	} else {
+		CGFloat h = dirBrowser.superview.frame.size.height; // remember the size before collapsing
+		if (h > 0) _savedBrowserHeight = h;
+		[self.splitView setPosition:0 ofDividerAtIndex:0]; // 0 collapses (canCollapseSubview allows it)
+	}
+	dispatch_async(dispatch_get_main_queue(), ^{ self->_togglingBrowser = NO; }); // clear after this cycle's resizes
 }
 
 -(BOOL)splitView:(NSSplitView *)splitView canCollapseSubview:(NSView *)subview {

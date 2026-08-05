@@ -386,6 +386,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 		@"slideshowWindowFitToImage": @NO,
 		@"exifThumbnailShow": @NO,
 		@"showFilenames": @YES,
+		@"showPathBar": @NO,
 		@"sortBy": @1, // sort by filename, ascending
 		@"Slideshow:RerandomizeOnLoop": @YES,
 		@"SlideshowSuppressLoopIndicator": @NO,
@@ -1446,6 +1447,8 @@ enum {
 	DELETE_PERMANENTLY,
 	QUICK_LOOK = 20, // 18=New Window, 19=Select None (tags live only in MainMenu.xib)
 	GO_TO_FOLDER = 24, // 21=Preferences, 22=End Slideshow, 23=Cheat Sheet (tags in MainMenu.xib)
+	SHOW_DIRECTORY_BROWSER = 25,
+	SHOW_PATH_BAR = 26,
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -1539,6 +1542,19 @@ enum {
 			return numSelected > 0 && frontWindow && frontWindow.window.isMainWindow && frontWindow.filenamesDone;
 		case GO_TO_FOLDER:
 			return !slidesWindow.isMainWindow && frontWindow != nil;
+		case SHOW_PATH_BAR:
+			// Show/Hide verb-swap (Finder convention for toggling a UI element), no checkmark
+			menuItem.title = frontWindow.pathBarVisible ? @"Hide Path Bar" : @"Show Path Bar";
+			menuItem.state = NSControlStateValueOff;
+			return !slidesWindow.isMainWindow && frontWindow != nil;
+		case SHOW_DIRECTORY_BROWSER:
+			menuItem.title = frontWindow.directoryBrowserVisible ? @"Hide Directory Browser" : @"Show Directory Browser";
+			menuItem.state = NSControlStateValueOff;
+			return !slidesWindow.isMainWindow && frontWindow != nil;
+		case SHOW_FILE_NAMES:
+			menuItem.title = frontWindow.imageMatrix.showFilenames ? @"Hide File Names" : @"Show File Names";
+			menuItem.state = NSControlStateValueOff;
+			return !slidesWindow.isMainWindow && frontWindow != nil;
 		case SET_DESKTOP:
 			return slidesWindow.isMainWindow
 				? (slidesWindow.currentFile != nil)
@@ -1554,7 +1570,6 @@ enum {
 			return YES;
 		case GET_INFO:
 		case SORT_NAME:
-		case SHOW_FILE_NAMES:
 			return !slidesWindow.isMainWindow;
 		default:
 			return YES;
@@ -1591,12 +1606,22 @@ enum {
 }
 
 - (IBAction)doShowFilenames:(id)sender {
+	// title flips Show/Hide in validateMenuItem, so no checkmark to set here
 	BOOL b = !frontWindow.imageMatrix.showFilenames;
-	NSMenuItem *item = sender;
-	item.state = b;
 	frontWindow.imageMatrix.showFilenames = b;
 	if (creeveyWindows.count == 1) // save as default if this is the only window
 		[NSUserDefaults.standardUserDefaults setBool:b forKey:@"showFilenames"];
+}
+
+- (IBAction)togglePathBar:(id)sender {
+	frontWindow.pathBarVisible = !frontWindow.pathBarVisible;
+	[NSUserDefaults.standardUserDefaults setBool:frontWindow.pathBarVisible forKey:@"showPathBar"];
+}
+
+- (IBAction)toggleDirectoryBrowser:(id)sender {
+	// the split view persists its own position (MainWindowSplitViewTopHeight), so the
+	// collapsed state is remembered across launches without a separate preference
+	frontWindow.directoryBrowserVisible = !frontWindow.directoryBrowserVisible;
 }
 
 - (IBAction)doAutoRotateDisplayedImage:(id)sender {
@@ -1884,7 +1909,7 @@ static void SendAction(NSMenuItem *sender) {
 	// make sure menu items are checked properly (code copied from windowChanged:)
 	NSMenu *m = [NSApp.mainMenu itemWithTag:VIEW_MENU].submenu;
 	[self updateMenuItemsForSorting:sortOrder];
-	[m itemWithTag:SHOW_FILE_NAMES].state = wc.imageMatrix.showFilenames ? NSControlStateValueOn : NSControlStateValueOff;
+	// Show File Names uses a Show/Hide title (set in validateMenuItem), so no checkmark here
 	[m itemWithTag:AUTO_ROTATE].state = wc.imageMatrix.autoRotate ? NSControlStateValueOn : NSControlStateValueOff;
 }
 
@@ -1920,7 +1945,7 @@ static void SendAction(NSMenuItem *sender) {
 	short int sortOrder = frontWindow.sortOrder;
 	NSMenu *m = [NSApp.mainMenu itemWithTag:VIEW_MENU].submenu;
 	[self updateMenuItemsForSorting:sortOrder];
-	[m itemWithTag:SHOW_FILE_NAMES].state = frontWindow.imageMatrix.showFilenames ? NSControlStateValueOn : NSControlStateValueOff;
+	// Show File Names uses a Show/Hide title (set in validateMenuItem), so no checkmark here
 	[m itemWithTag:AUTO_ROTATE].state = frontWindow.imageMatrix.autoRotate ? NSControlStateValueOn : NSControlStateValueOff;
 }
 

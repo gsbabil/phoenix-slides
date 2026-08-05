@@ -301,6 +301,18 @@ CA
                                     <action selector="doShowFilenames:" target="207" id="856"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Show Directory Browser" tag="25" keyEquivalent="b" id="FBr-mi-001">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="toggleDirectoryBrowser:" target="207" id="FBr-ac-002"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Show Path Bar" tag="26" keyEquivalent="p" id="PBr-mi-001">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="togglePathBar:" target="207" id="PBr-ac-002"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="859"/>
                             <menuItem title="Auto-Rotate by Orientation Tag" tag="261" id="860">
                                 <modifierMask key="keyEquivalentModifierMask"/>
