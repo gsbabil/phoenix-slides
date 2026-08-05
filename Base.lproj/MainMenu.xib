@@ -313,6 +313,12 @@ CA
                                     <action selector="togglePathBar:" target="207" id="PBr-ac-002"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Show Unsupported Files" tag="27" keyEquivalent="u" id="Uns-mi-001">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="toggleUnsupportedFiles:" target="207" id="Uns-ac-002"/>
+                                </connections>
+                            </menuItem>
                             <menuItem isSeparatorItem="YES" id="859"/>
                             <menuItem title="Auto-Rotate by Orientation Tag" tag="261" id="860">
                                 <modifierMask key="keyEquivalentModifierMask"/>

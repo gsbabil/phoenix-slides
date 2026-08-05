@@ -526,6 +526,21 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 			files = frontWindow.currentSelection;
 		}
 	}
+	if (frontWindow.showUnsupportedFiles) {
+		// the slideshow can't display unsupported files, so drop them from the list; if the
+		// file the user started on is one of them, open it in its default app and bail
+		NSString *startFile = (startIdx != NSNotFound && startIdx < files.count) ? files[startIdx] : nil;
+		if (startFile && ![self shouldShowFile:[NSURL fileURLWithPath:startFile]]) {
+			[NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:startFile]];
+			return;
+		}
+		NSMutableArray *supported = [NSMutableArray arrayWithCapacity:files.count];
+		for (NSString *p in files)
+			if ([self shouldShowFile:[NSURL fileURLWithPath:p]]) [supported addObject:p];
+		if (!supported.count) return;
+		files = supported;
+		startIdx = startFile ? [files indexOfObject:startFile] : NSNotFound;
+	}
 	if (wantsUpdates) {
 		[slidesWindow setFilenames:files basePath:frontWindow.path wantsSubfolders:frontWindow.wantsSubfolders comparator:frontWindow.comparator sortOrder:frontWindow.sortOrder];
 	} else {
@@ -553,6 +568,20 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 }
 
 - (IBAction)openSelectedFiles:(id)sender {
+	// files that the app can't display (shown via "Show Unsupported Files") open in their
+	// default app instead of the slideshow; a mixed selection still starts a slideshow of
+	// the supported files (unsupported ones are filtered out in startSlideshowFullscreen:)
+	NSArray *sel = frontWindow.currentSelection;
+	if (sel.count) {
+		NSMutableArray *unsupported = [NSMutableArray array];
+		for (NSString *p in sel)
+			if (![self shouldShowFile:[NSURL fileURLWithPath:p]]) [unsupported addObject:p];
+		if (unsupported.count == sel.count) {
+			for (NSString *p in unsupported)
+				[NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:p]];
+			return;
+		}
+	}
 	BOOL fullscreen = [NSUserDefaults.standardUserDefaults integerForKey:@"slideshowDefaultMode"] == 0;
 	if (NSApp.currentEvent.modifierFlags & NSEventModifierFlagOption) fullscreen = !fullscreen;
 	[self startSlideshowFullscreen:fullscreen];
@@ -1449,6 +1478,7 @@ enum {
 	GO_TO_FOLDER = 24, // 21=Preferences, 22=End Slideshow, 23=Cheat Sheet (tags in MainMenu.xib)
 	SHOW_DIRECTORY_BROWSER = 25,
 	SHOW_PATH_BAR = 26,
+	SHOW_UNSUPPORTED = 27,
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -1555,6 +1585,10 @@ enum {
 			menuItem.title = frontWindow.imageMatrix.showFilenames ? @"Hide File Names" : @"Show File Names";
 			menuItem.state = NSControlStateValueOff;
 			return !slidesWindow.isMainWindow && frontWindow != nil;
+		case SHOW_UNSUPPORTED:
+			// a content-filter option, so a checkmark (not a Show/Hide verb-swap)
+			menuItem.state = frontWindow.showUnsupportedFiles;
+			return !slidesWindow.isMainWindow && frontWindow != nil;
 		case SET_DESKTOP:
 			return slidesWindow.isMainWindow
 				? (slidesWindow.currentFile != nil)
@@ -1622,6 +1656,11 @@ enum {
 	// the split view persists its own position (MainWindowSplitViewTopHeight), so the
 	// collapsed state is remembered across launches without a separate preference
 	frontWindow.directoryBrowserVisible = !frontWindow.directoryBrowserVisible;
+}
+
+- (IBAction)toggleUnsupportedFiles:(id)sender {
+	// the window re-scans its folder when this flips (see setShowUnsupportedFiles:)
+	frontWindow.showUnsupportedFiles = !frontWindow.showUnsupportedFiles;
 }
 
 - (IBAction)doAutoRotateDisplayedImage:(id)sender {
@@ -2026,6 +2065,16 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 	NSString *pathExtension = url.pathExtension.lowercaseString;
 	if (pathExtension.length == 0) return [fileostypes containsObject:NSHFSTypeOfFile(path)];
 	return [filetypes containsObject:pathExtension] || ([fileostypes containsObject:NSHFSTypeOfFile(path)] && ![disabledFiletypes containsObject:pathExtension]);
+}
+
+- (BOOL)shouldShowFile:(NSURL *)url includingUnsupported:(BOOL)includeUnsupported {
+	if ([self shouldShowFile:url]) return YES;
+	if (!includeUnsupported) return NO;
+	// admit any other non-hidden file (directories are already handled by the caller); these
+	// can't be shown in-app but can be Quick Looked / opened in their default app
+	NSNumber * __autoreleasing val;
+	if (IS_URL_HIDDEN) return NO;
+	return YES;
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView {

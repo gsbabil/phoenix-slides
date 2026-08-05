@@ -852,12 +852,13 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 			[filenames removeAllObjects];
 			[self clearImageCacheQueue];
 			BOOL recurseSubfolders = self.wantsSubfolders;
+			BOOL inclUnsupported = self.showUnsupportedFiles;
 			NSDirectoryEnumerator *e = CreeveyEnumerator(thePath, recurseSubfolders);
 			for (NSURL *url in e) {
 				@autoreleasepool {
 					if ([appDelegate handledDirectory:url subfolders:recurseSubfolders e:e])
 						continue;
-					if ([appDelegate shouldShowFile:url]) {
+					if ([appDelegate shouldShowFile:url includingUnsupported:inclUnsupported]) {
 						NSString *aPath = url.path;
 						[filenames addObject:aPath];
 						if (startSlideshowWhenReady && [filesBeingOpened containsObject:aPath])
@@ -1205,6 +1206,12 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 
 - (BOOL)directoryBrowserVisible {
 	return ![self.splitView isSubviewCollapsed:dirBrowser.superview];
+}
+
+- (void)setShowUnsupportedFiles:(BOOL)b {
+	if (b == _showUnsupportedFiles) return;
+	_showUnsupportedFiles = b;
+	[self displayDir:nil]; // re-scan the folder to add or drop the unsupported files
 }
 
 - (void)setDirectoryBrowserVisible:(BOOL)b {

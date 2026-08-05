@@ -40,6 +40,7 @@ CGFloat DYInterfaceTextScale(void);
 NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders);
 - (BOOL)handledDirectory:(NSURL *)url subfolders:(BOOL)recurse e:(NSDirectoryEnumerator *)e;
 - (BOOL)shouldShowFile:(NSURL *)path;
+- (BOOL)shouldShowFile:(NSURL *)url includingUnsupported:(BOOL)includeUnsupported;
 
 - (IBAction)slideshow:(id)sender;
 - (IBAction)slideshowAlternateMode:(id)sender;
@@ -59,6 +60,7 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 - (IBAction)doShowFilenames:(id)sender;
 - (IBAction)togglePathBar:(id)sender;
 - (IBAction)toggleDirectoryBrowser:(id)sender;
+- (IBAction)toggleUnsupportedFiles:(id)sender;
 - (IBAction)doAutoRotateDisplayedImage:(id)sender;
 
 - (void)slideshowFromAppOpen:(NSArray *)files;

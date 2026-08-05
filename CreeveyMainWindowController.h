@@ -24,6 +24,7 @@
 - (BOOL)setPath:(NSString *)s; // navigate the directory browser to a folder; NO if invalid
 @property (nonatomic) BOOL pathBarVisible;
 @property (nonatomic) BOOL directoryBrowserVisible;
+@property (nonatomic) BOOL showUnsupportedFiles;
 @property (nonatomic, readonly) NSURL *URL;
 @property (nonatomic, readonly) NSArray *currentSelection;
 @property (nonatomic, readonly) NSIndexSet *selectedIndexes;
