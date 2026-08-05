@@ -205,6 +205,8 @@ typedef struct {
 	NSLayoutConstraint *_pathBarHeight;  // toggled between a row height and 0 to show/hide
 	CGFloat _savedBrowserHeight;         // last non-zero directory-browser height, for restore
 	BOOL _togglingBrowser;               // set while show/hide runs, to protect _savedBrowserHeight
+	BOOL _directoryBrowserHidden;        // YES when only the control strip shows (browser hidden)
+	NSLayoutConstraint *_browserMinHeight, *_browserGap, *_browserZeroHeight;
 }
 @synthesize dirBrowser, slidesBtn, imgMatrix, statusFld, bottomStatusFld;
 
@@ -1206,6 +1208,9 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 
 - (void)splitViewDidResizeSubviews:(NSNotification *)notification
 {
+	// only persist/remember the height while the browser is actually shown — when it's
+	// hidden the pane is shrunk to the control strip, which isn't a height worth restoring
+	if (_directoryBrowserHidden) return;
 	float height = statusFld.superview.hidden ? 0 : statusFld.superview.frame.size.height;
 	[NSUserDefaults.standardUserDefaults setFloat:height forKey:@"MainWindowSplitViewTopHeight"];
 	// remember heights from real user drags only; the show/hide toggle sets _togglingBrowser
@@ -1214,25 +1219,57 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 }
 
 - (BOOL)directoryBrowserVisible {
-	return ![self.splitView isSubviewCollapsed:dirBrowser.superview];
+	return !_directoryBrowserHidden;
+}
+
+// The directory browser and the control strip (file count, Unsupported/Subfolders, Slideshow)
+// share the top split pane. To keep the strip visible when the browser is hidden, we drop just
+// the browser view and shrink the pane to the strip, instead of collapsing the whole pane.
+- (void)ensureBrowserToggleConstraints {
+	if (_browserZeroHeight) return;
+	NSView *pane = dirBrowser.superview;
+	for (NSLayoutConstraint *c in dirBrowser.constraints)
+		if (c.firstItem == dirBrowser && c.firstAttribute == NSLayoutAttributeHeight && c.relation == NSLayoutRelationGreaterThanOrEqual)
+			_browserMinHeight = c; // browser's height >= 30
+	for (NSLayoutConstraint *c in pane.constraints)
+		if (c.firstItem == slidesBtn && c.firstAttribute == NSLayoutAttributeTop && c.secondItem == dirBrowser && c.secondAttribute == NSLayoutAttributeBottom)
+			_browserGap = c; // control strip sits below the browser
+	_browserZeroHeight = [dirBrowser.heightAnchor constraintEqualToConstant:0]; // inactive until hidden
 }
 
 - (void)setShowUnsupportedFiles:(BOOL)b {
 	if (b == _showUnsupportedFiles) return;
 	_showUnsupportedFiles = b;
+	_unsupportedButton.state = b ? NSControlStateValueOn : NSControlStateValueOff; // sync the checkbox (menu-driven toggles land here too)
 	[self displayDir:nil]; // re-scan the folder to add or drop the unsupported files
 }
 
-- (void)setDirectoryBrowserVisible:(BOOL)b {
-	if (b == self.directoryBrowserVisible) return;
-	_togglingBrowser = YES; // guard _savedBrowserHeight against the collapse's own resize passes
-	if (b) {
+- (IBAction)toggleUnsupportedFilesButton:(id)sender {
+	self.showUnsupportedFiles = ([(NSButton *)sender state] == NSControlStateValueOn);
+}
+
+- (void)setDirectoryBrowserVisible:(BOOL)show {
+	if (show == !_directoryBrowserHidden) return;
+	[self ensureBrowserToggleConstraints];
+	_directoryBrowserHidden = !show;
+	_togglingBrowser = YES; // guard _savedBrowserHeight against the resize passes below
+	NSView *pane = dirBrowser.superview;
+	if (show) {
+		dirBrowser.hidden = NO;
+		_browserZeroHeight.active = NO;
+		_browserGap.active = YES;
+		_browserMinHeight.active = YES;
 		CGFloat h = _savedBrowserHeight > 0 ? _savedBrowserHeight : 151;
 		[self.splitView setPosition:h ofDividerAtIndex:0];
 	} else {
-		CGFloat h = dirBrowser.superview.frame.size.height; // remember the size before collapsing
-		if (h > 0) _savedBrowserHeight = h;
-		[self.splitView setPosition:0 ofDividerAtIndex:0]; // 0 collapses (canCollapseSubview allows it)
+		// keep the control strip: hide only the browser and shrink the pane to the strip below it
+		CGFloat strip = pane.frame.size.height - dirBrowser.frame.size.height;
+		if (pane.frame.size.height > strip) _savedBrowserHeight = pane.frame.size.height;
+		dirBrowser.hidden = YES;
+		_browserMinHeight.active = NO; // let the browser go to zero height
+		_browserGap.active = NO;       // unlink the strip from the (now hidden) browser
+		_browserZeroHeight.active = YES;
+		[self.splitView setPosition:strip ofDividerAtIndex:0];
 	}
 	dispatch_async(dispatch_get_main_queue(), ^{ self->_togglingBrowser = NO; }); // clear after this cycle's resizes
 }

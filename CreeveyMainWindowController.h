@@ -16,6 +16,7 @@
 @property (weak) IBOutlet NSTextField *statusFld;
 @property (weak) IBOutlet NSTextField *bottomStatusFld;
 @property (weak) IBOutlet NSButton *subfoldersButton;
+@property (weak) IBOutlet NSButton *unsupportedButton;
 
 - (IBAction)setRecurseSubfolders:(id)sender;
 
