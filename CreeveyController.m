@@ -391,6 +391,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 
 - (IBAction)quickLook:(id)sender {
 	QLPreviewPanel *panel = QLPreviewPanel.sharedPreviewPanel;
+	panel.animationBehavior = NSWindowAnimationBehaviorNone; // open/close instantly, no zoom/fade
 	if (QLPreviewPanel.sharedPreviewPanelExists && panel.isVisible)
 		[panel orderOut:nil];
 	else
@@ -1118,6 +1119,12 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	[_keyBindings load];
 	[_keyBindings applyToMainMenu];
 	[_keyBindings reportErrorsIfAny];
+
+	// warm up Quick Look after launch so the first Space press doesn't also pay the
+	// QuickLookUI framework load / panel creation cost on top of rendering
+	dispatch_async(dispatch_get_main_queue(), ^{
+		(void)QLPreviewPanel.sharedPreviewPanel;
+	});
 
 	[self showExifThumbnail:[u boolForKey:@"exifThumbnailShow"]
 			   shrinkWindow:NO];

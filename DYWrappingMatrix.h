@@ -63,7 +63,6 @@
 - (void)selectFilenames:(NSArray *)arr comparator:(NSComparator)cmp;
 - (void)selectIndex:(NSUInteger)i;
 - (void)scrollToFirstSelected:(NSIndexSet *)x;
-- (NSRect)screenRectForCellAtIndex:(NSUInteger)i; // thumbnail rect in screen coords, or NSZeroRect if off-screen
 
 @property (nonatomic, readonly) NSUInteger numCells;
 

@@ -484,13 +484,6 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	});
 }
 
-// zoom the panel open from (and closed to) the thumbnail, for immediate feedback
-- (NSRect)previewPanel:(QLPreviewPanel *)panel sourceFrameOnScreenForPreviewItem:(id <QLPreviewItem>)item {
-	NSInteger idx = panel.currentPreviewItemIndex;
-	if (idx < 0 || idx >= (NSInteger)displayedFilenames.count) return NSZeroRect;
-	return [imgMatrix screenRectForCellAtIndex:idx];
-}
-
 - (void)openFiles:(NSArray *)a withSlideshow:(BOOL)doSlides{
 	startSlideshowWhenReady = doSlides;
 	[filesBeingOpened addObjectsFromArray:a];
