@@ -27,7 +27,7 @@
                             <menuItem isSeparatorItem="YES" id="196">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Preferences…" keyEquivalent="," id="129">
+                            <menuItem title="Preferences…" tag="21" keyEquivalent="," id="129">
                                 <connections>
                                     <action selector="openPrefWin:" target="207" id="411"/>
                                 </connections>
@@ -415,7 +415,7 @@ DQ
                                     <action selector="slideshowAlternateMode:" target="207" id="pLp-k2-hup"/>
                                 </connections>
                             </menuItem>
-                            <menuItem title="End Slideshow" id="329">
+                            <menuItem title="End Slideshow" tag="22" id="329">
                                 <string key="keyEquivalent" base64-UTF8="YES">
 Gw
 </string>
@@ -454,7 +454,7 @@ Gw
                             <menuItem isSeparatorItem="YES" id="417">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Show Cheat Sheet" keyEquivalent="?" id="418">
+                            <menuItem title="Show Cheat Sheet" tag="23" keyEquivalent="?" id="418">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
                                     <action selector="toggleCheatSheet:" target="210" id="419"/>

@@ -1300,6 +1300,9 @@ enum {
 
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+	// Preferences carries a tag only so it can be rebound; it's always available,
+	// so validate it by action rather than falling into the tag-based gates below.
+	if (menuItem.action == @selector(openPrefWin:)) return YES;
 	NSInteger t = menuItem.tag;
 	NSInteger test_t = t;
 	if (!NSApp.mainWindow) {

@@ -39,6 +39,16 @@ static const DYMenuActionDef kMenuActions[] = {
 	{"menu.sortByDateAdded",  204},
 	{"menu.sortByType",       205},
 	{"menu.sortBySize",       206},
+	{"menu.sortByFilePath",   207},
+	{"menu.saveRotation",     117},
+	{"menu.advancedOptions",  100},
+	{"menu.toggleLoop",         3},
+	{"menu.toggleRandom",       7},
+	{"menu.scaleUp",            8},
+	{"menu.actualSize",         9},
+	{"menu.endSlideshow",      22},  // tag added in MainMenu.xib
+	{"menu.showCheatSheet",    23},  // tag added in MainMenu.xib
+	{"menu.preferences",       21},  // tag added in MainMenu.xib
 };
 
 // Single-key actions. defaultKeys is a comma-separated list of keystrokes; the
