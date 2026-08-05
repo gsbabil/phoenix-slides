@@ -361,6 +361,11 @@ typedef struct {
 {
 	if ([keyPath isEqualToString:@"values.DYWrappingMatrixMaxCellWidth"]) {
 		_maxCellWidth = [NSUserDefaults.standardUserDefaults integerForKey:@"DYWrappingMatrixMaxCellWidth"];
+	} else if ([keyPath isEqualToString:@"currentPreviewItemIndex"]) {
+		// Quick Look changed its current item (e.g. its own left/right nav) — follow it in the grid
+		NSInteger idx = ((QLPreviewPanel *)object).currentPreviewItemIndex;
+		if (idx >= 0 && idx < (NSInteger)displayedFilenames.count && imgMatrix.selectedIndexes.firstIndex != (NSUInteger)idx)
+			[self selectIndex:idx];
 	}
 }
 
@@ -518,9 +523,13 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	panel.dataSource = self;
 	NSUInteger sel = imgMatrix.selectedIndexes.firstIndex;
 	panel.currentPreviewItemIndex = (sel == NSNotFound) ? 0 : sel;
+	// Quick Look navigates left/right itself (those keys never reach handleEvent:), so watch
+	// its index and mirror it in the grid to keep the highlighted thumbnail in lock-step
+	[panel addObserver:self forKeyPath:@"currentPreviewItemIndex" options:0 context:NULL];
 }
 
 - (void)endPreviewPanelControl:(QLPreviewPanel *)panel {
+	[panel removeObserver:self forKeyPath:@"currentPreviewItemIndex"];
 	panel.delegate = nil;
 	panel.dataSource = nil;
 }
