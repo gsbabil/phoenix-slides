@@ -1671,7 +1671,15 @@ enum {
 }
 
 - (IBAction)openAboutPanel:(id)sender {
-	[NSApp orderFrontStandardAboutPanelWithOptions:@{@"ApplicationIcon": [NSImage imageNamed:@"logo"]}];
+	NSMutableDictionary *opts = [@{NSAboutPanelOptionApplicationIcon: [NSImage imageNamed:@"logo"]} mutableCopy];
+	// append the short git commit hash (stamped into GitInfo.plist at build time) to the build number
+	NSBundle *b = NSBundle.mainBundle;
+	NSURL *gitInfoURL = [b URLForResource:@"GitInfo" withExtension:@"plist"];
+	NSString *hash = gitInfoURL ? [NSDictionary dictionaryWithContentsOfURL:gitInfoURL][@"GitCommitHash"] : nil;
+	NSString *build = [b objectForInfoDictionaryKey:@"CFBundleVersion"];
+	if (hash.length && build.length)
+		opts[NSAboutPanelOptionVersion] = [NSString stringWithFormat:@"%@ · %@", build, hash];
+	[NSApp orderFrontStandardAboutPanelWithOptions:opts];
 }
 
 #pragma mark configuration
