@@ -146,6 +146,12 @@ IA
                                     <action selector="revealSelectedFilesInFinder:" target="207" id="344"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Copy as Pathname" tag="28" keyEquivalent="c" id="Cpn-me-200">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="copySelectedFilePaths:" target="207" id="Cpn-me-201"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Rename…" tag="16" id="Rn1-me-100">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>

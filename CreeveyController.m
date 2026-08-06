@@ -426,6 +426,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 		@"MainWindowSplitViewTopHeight":@151.0f,
 		@"interfaceTextSize":@0, // 0 small (current), 1 medium, 2 large, 3 custom
 		@"interfaceTextCustomSize":@13, // point size when interfaceTextSize == 3 (custom)
+		@"copyPathnameShellQuoted":@YES, // Copy as Pathname: YES = shell-quoted, NO = Finder-style raw
 	}];
 
 	[NSValueTransformer setValueTransformer:[[TimeIntervalPlusWeekToStringTransformer alloc] init]
@@ -647,6 +648,25 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	}
 }
 
+
+- (IBAction)copySelectedFilePaths:(id)sender {
+	NSArray<NSString *> *paths = frontWindow.currentSelection;
+	if (!paths.count) { NSBeep(); return; }
+	NSString *text;
+	if ([NSUserDefaults.standardUserDefaults boolForKey:@"copyPathnameShellQuoted"]) {
+		// shell-quoted: single-quote each path (escaping embedded quotes), space-separated
+		NSMutableArray *quoted = [NSMutableArray arrayWithCapacity:paths.count];
+		for (NSString *p in paths)
+			[quoted addObject:[NSString stringWithFormat:@"'%@'", [p stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"]]];
+		text = [quoted componentsJoinedByString:@" "];
+	} else {
+		// Finder-style: the raw POSIX path(s), one per line
+		text = [paths componentsJoinedByString:@"\n"];
+	}
+	NSPasteboard *pb = NSPasteboard.generalPasteboard;
+	[pb clearContents];
+	[pb setString:text forType:NSPasteboardTypeString];
+}
 
 - (IBAction)setDesktopPicture:(id)sender {
 	NSString *s = slidesWindow.isMainWindow
@@ -1503,6 +1523,7 @@ enum {
 	SHOW_DIRECTORY_BROWSER = 25,
 	SHOW_PATH_BAR = 26,
 	SHOW_UNSUPPORTED = 27,
+	COPY_PATHNAME = 28,
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -1596,6 +1617,8 @@ enum {
 			return numSelected > 0 && frontWindow && frontWindow.window.isMainWindow && frontWindow.filenamesDone;
 		case GO_TO_FOLDER:
 			return !slidesWindow.isMainWindow && frontWindow != nil;
+		case COPY_PATHNAME:
+			return !slidesWindow.isMainWindow && numSelected > 0;
 		case SHOW_PATH_BAR:
 			// Show/Hide verb-swap (Finder convention for toggling a UI element), no checkmark
 			menuItem.title = frontWindow.pathBarVisible ? @"Hide Path Bar" : @"Show Path Bar";

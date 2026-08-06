@@ -343,6 +343,16 @@
                                                 <binding destination="551" name="value" keyPath="values.DYWrappingMatrixAllowMove" id="694"/>
                                             </connections>
                                         </button>
+                                        <button toolTip="When on, Copy as Pathname produces shell-quoted paths (safe for spaces and special characters); when off, raw Finder-style paths." translatesAutoresizingMaskIntoConstraints="NO" id="Cpq-btn-001">
+                                            <rect key="frame" x="20" y="95" width="240" height="16"/>
+                                            <buttonCell key="cell" type="check" title="Shell-quote copied pathnames" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="Cpq-cel-002">
+                                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                                <font key="font" metaFont="system"/>
+                                            </buttonCell>
+                                            <connections>
+                                                <binding destination="551" name="value" keyPath="values.copyPathnameShellQuoted" id="Cpq-bnd-003"/>
+                                            </connections>
+                                        </button>
                                         <button translatesAutoresizingMaskIntoConstraints="NO" id="548">
                                             <rect key="frame" x="20" y="67" width="217" height="16"/>
                                             <buttonCell key="cell" type="check" title="Automatically check for updates" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="818">
@@ -418,7 +428,10 @@
                                         <constraint firstItem="2rn-Xo-dYj" firstAttribute="top" secondItem="4Bj-yv-gIT" secondAttribute="bottom" constant="8" symbolic="YES" id="LgP-Ej-MYf"/>
                                         <constraint firstItem="JE2-gK-vCp" firstAttribute="leading" secondItem="vJq-9X-o03" secondAttribute="leading" id="NCw-JO-QGE"/>
                                         <constraint firstItem="xKo-Ye-awl" firstAttribute="leading" secondItem="590" secondAttribute="leading" constant="20" symbolic="YES" id="Ni5-rS-kEt"/>
-                                        <constraint firstItem="574" firstAttribute="top" secondItem="689" secondAttribute="bottom" constant="6" symbolic="YES" id="Pfk-4i-1Dn"/>
+                                        <constraint firstItem="574" firstAttribute="top" secondItem="Cpq-btn-001" secondAttribute="bottom" constant="6" symbolic="YES" id="Pfk-4i-1Dn"/>
+                                        <constraint firstItem="Cpq-btn-001" firstAttribute="top" secondItem="689" secondAttribute="bottom" constant="6" symbolic="YES" id="Cpq-con-101"/>
+                                        <constraint firstItem="Cpq-btn-001" firstAttribute="leading" secondItem="590" secondAttribute="leading" constant="20" symbolic="YES" id="Cpq-con-102"/>
+                                        <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="Cpq-btn-001" secondAttribute="trailing" priority="250" constant="20" symbolic="YES" id="Cpq-con-103"/>
                                         <constraint firstItem="398" firstAttribute="leading" secondItem="689" secondAttribute="leading" priority="750" id="Pw3-fA-eke"/>
                                         <constraint firstAttribute="trailing" secondItem="575" secondAttribute="trailing" constant="20" symbolic="YES" id="Qed-5b-Wm2"/>
                                         <constraint firstItem="398" firstAttribute="leading" secondItem="697" secondAttribute="leading" id="Qhd-zx-ehV"/>

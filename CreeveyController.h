@@ -47,6 +47,7 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 - (IBAction)openSelectedFiles:(id)sender;
 - (IBAction)quickLook:(id)sender;
 - (IBAction)revealSelectedFilesInFinder:(id)sender;
+- (IBAction)copySelectedFilePaths:(id)sender;
 - (IBAction)setDesktopPicture:(id)sender;
 - (IBAction)moveSelectedFiles:(id)sender;
 - (IBAction)moveSelectedFilesAgain:(id)sender;

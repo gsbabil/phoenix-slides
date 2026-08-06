@@ -44,6 +44,7 @@ static const DYMenuActionDef kMenuActions[] = {
 	{"menu.showDirectoryBrowser", 25},  // tag added in MainMenu.xib
 	{"menu.showPathBar",       26},  // tag added in MainMenu.xib
 	{"menu.showUnsupportedFiles", 27},  // tag added in MainMenu.xib
+	{"menu.copyAsPathname",    28},  // tag added in MainMenu.xib
 	{"menu.saveRotation",     117},
 	{"menu.advancedOptions",  100},
 	{"menu.toggleLoop",         3},
