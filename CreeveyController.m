@@ -2062,10 +2062,12 @@ static void SendAction(NSMenuItem *sender) {
 	if (creeveyWindows.count && exifWasVisible)
 		[exifTextView.window orderFront:nil];
 	if (creeveyWindows.count && frontWindow.currentSelection.count <= 1) {
-		NSArray *a = frontWindow.displayedFilenames;
-		NSUInteger i = slidesWindow.currentIndex;
-		if (i < a.count
-			&& [a[i] isEqualToString:slidesWindow.currentFile])
+		// select the last-shown file by name, not index: after deletions/renames (or random/
+		// subset), the slideshow's list and the browser's displayedFilenames diverge, so the
+		// old index cross-check failed and left the pre-slideshow (start) file selected
+		NSString *endFile = slidesWindow.currentFile;
+		NSUInteger i = endFile ? [frontWindow indexOfFilename:endFile] : NSNotFound;
+		if (i != NSNotFound)
 			[frontWindow selectIndex:i];
 	}
 }
