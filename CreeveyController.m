@@ -122,8 +122,15 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 @interface DYRenameFieldDelegate : NSObject <NSTextViewDelegate>
 @property (weak) NSAlert *alert;
 @property (weak) NSTextField *countLabel;
+@property (strong) NSUndoManager *undoManager; // dedicated undo stack for the rename field
 @end
 @implementation DYRenameFieldDelegate
+// give the text view its own undo manager so Cmd-Z/Shift-Cmd-Z work inside the modal alert,
+// where the alert window doesn't vend one of its own
+- (NSUndoManager *)undoManagerForTextView:(NSTextView *)view {
+	if (!_undoManager) _undoManager = [[NSUndoManager alloc] init];
+	return _undoManager;
+}
 - (BOOL)textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector {
 	if (commandSelector == @selector(insertNewline:)) {
 		[self.alert.buttons.firstObject performClick:nil];
@@ -1165,6 +1172,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	NSTextView *input = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, contentWidth, 54)];
 	input.font = font;
 	input.richText = NO;
+	input.allowsUndo = YES; // enable Cmd-Z / Shift-Cmd-Z for typed text
 	// never let macOS "helpfully" rewrite a file name
 	input.automaticQuoteSubstitutionEnabled = NO;
 	input.automaticDashSubstitutionEnabled = NO;
