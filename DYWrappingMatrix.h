@@ -41,6 +41,7 @@
 @property (weak) IBOutlet id delegate;
 @property (weak, nonatomic) NSImage *loadingImage;
 @property (nonatomic) NSColor *imageBackgroundColor;
+@property (nonatomic) BOOL selectionUpdatesSuppressed; // skip selection redraw/scroll (e.g. while hidden behind Quick Look)
 
 @property (class, readonly) NSSize maxCellSize;
 

@@ -318,6 +318,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 }
 
 - (void)selectionNeedsDisplay:(NSUInteger)n {
+	if (_selectionUpdatesSuppressed) return; // grid is hidden (Quick Look); redraw happens on restore
 	NSUInteger row, col;
 	row = n/numCols;
 	col = n%numCols;
@@ -797,6 +798,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 }
 - (void)scrollSelectionToVisible:(NSUInteger)n {
 	[self notifySelectionDidChange];
+	if (_selectionUpdatesSuppressed) return; // don't scroll/redraw a grid hidden behind Quick Look
 	NSRect r = [self cellnum2rect:n];
 	[self selectionNeedsDisplay:n];
 	// round down for better auto-scrolling

@@ -207,6 +207,7 @@ typedef struct {
 	BOOL _togglingBrowser;               // set while show/hide runs, to protect _savedBrowserHeight
 	BOOL _directoryBrowserHidden;        // YES when only the control strip shows (browser hidden)
 	NSLayoutConstraint *_browserMinHeight, *_browserGap, *_browserZeroHeight;
+	BOOL _quickLookActive;               // YES while the Quick Look panel has control
 }
 @synthesize dirBrowser, slidesBtn, imgMatrix, statusFld, bottomStatusFld;
 
@@ -523,6 +524,8 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 - (void)beginPreviewPanelControl:(QLPreviewPanel *)panel {
 	panel.delegate = self;
 	panel.dataSource = self;
+	_quickLookActive = YES; // suppress the browser's per-selection status/EXIF work; it's hidden behind the panel
+	imgMatrix.selectionUpdatesSuppressed = YES; // and don't scroll/redraw the hidden grid (avoids background thumbnailing that competes with quicklookd)
 	NSUInteger sel = imgMatrix.selectedIndexes.firstIndex;
 	panel.currentPreviewItemIndex = (sel == NSNotFound) ? 0 : sel;
 	// Quick Look navigates left/right itself (those keys never reach handleEvent:), so watch
@@ -534,6 +537,14 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	[panel removeObserver:self forKeyPath:@"currentPreviewItemIndex"];
 	panel.delegate = nil;
 	panel.dataSource = nil;
+	_quickLookActive = NO;
+	imgMatrix.selectionUpdatesSuppressed = NO;
+	[imgMatrix setNeedsDisplay:YES]; // clear any stale highlight left while suppressed
+	NSUInteger i = imgMatrix.selectedIndexes.firstIndex;
+	if (i != NSNotFound)
+		[imgMatrix selectIndex:i]; // scroll the landed image into view and refresh status/EXIF
+	else
+		[self wrappingMatrixSelectionDidChange:imgMatrix.selectedIndexes];
 }
 
 - (NSInteger)numberOfPreviewItemsInPreviewPanel:(QLPreviewPanel *)panel {
@@ -1280,6 +1291,10 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 
 #pragma mark wrapping matrix methods
 - (void)wrappingMatrixSelectionDidChange:(NSIndexSet *)selectedIndexes {
+	// While Quick Look is up, the status line and Get Info panel are hidden behind it, so skip
+	// this work (it can decode an image just to report its dimensions). endPreviewPanelControl
+	// calls us once when the panel closes to refresh for the file we landed on.
+	if (_quickLookActive) return;
 	NSString *s;
 	NSUInteger count = selectedIndexes.count;
 	if (count == 0) {
