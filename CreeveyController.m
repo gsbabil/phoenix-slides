@@ -218,7 +218,9 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 	_sheet.initialFirstResponder = _field;
 	[self updateMatches];
 	[_parent beginSheet:_sheet completionHandler:^(NSModalResponse r){}];
-	_field.currentEditor.selectedRange = NSMakeRange(_field.stringValue.length, 0);
+	// select the whole path so typing immediately replaces it (Finder-style); press → to
+	// deselect and keep browsing from the current folder
+	_field.currentEditor.selectedRange = NSMakeRange(0, _field.stringValue.length);
 }
 
 - (void)finishWithPath:(NSString *)path {
@@ -1849,7 +1851,10 @@ enum {
 - (IBAction)goToFolder:(id)sender {
 	CreeveyMainWindowController *wc = frontWindow;
 	if (!wc) return;
-	NSString *start = wc.path.length ? [wc.path.stringByAbbreviatingWithTildeInPath stringByAppendingString:@"/"] : @"~/";
+	NSString *abbrev = wc.path.stringByAbbreviatingWithTildeInPath;
+	// append a trailing slash (so the field lists the folder's contents) unless the path is
+	// already slash-terminated, e.g. root "/" — otherwise we'd produce "//"
+	NSString *start = wc.path.length ? ([abbrev hasSuffix:@"/"] ? abbrev : [abbrev stringByAppendingString:@"/"]) : @"~/";
 	[DYGoToFolderController presentForWindow:wc.window startingPath:start completion:^(NSString *chosen){
 		if (chosen) [wc setPath:chosen];
 	}];
