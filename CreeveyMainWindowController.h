@@ -40,6 +40,11 @@
 @property (readonly) BOOL wantsSubfolders;
 @property (nonatomic, readonly) DYWrappingMatrix *imageMatrix;
 
+// Open Recent: capture the window's full navigable state, and restore it (navigate +
+// apply sort/toggles + select the remembered file once the async load finishes)
+- (NSDictionary *)currentStateDictionary;
+- (void)restoreState:(NSDictionary *)state;
+
 //other
 - (void)setDefaultPath;
 - (void)updateDefaults;

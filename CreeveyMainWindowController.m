@@ -476,6 +476,53 @@ typedef struct {
 }
 
 
+#pragma mark Open Recent state
+// Snapshot the window's full navigable state (nil if no folder is loaded yet).
+- (NSDictionary *)currentStateDictionary {
+	NSString *unresolved = dirBrowserDelegate.unresolvedPath;
+	if (!unresolved.length) return nil;
+	NSString *focused = imgMatrix.firstSelectedFilename;
+	NSMutableDictionary *d = [NSMutableDictionary dictionary];
+	d[@"path"] = ResolveAliasToPath(unresolved);            // resolved: identity / existence
+	d[@"displayPath"] = unresolved.stringByAbbreviatingWithTildeInPath; // ~-abbreviated: menu title
+	d[@"focusedFile"] = focused ?: @"";
+	d[@"sortOrder"] = @(sortOrder);
+	d[@"wantsSubfolders"] = @(self.wantsSubfolders);
+	if (self.recurseRoot) d[@"recurseRoot"] = self.recurseRoot;
+	d[@"showUnsupportedFiles"] = @(_showUnsupportedFiles);
+	d[@"showFilenames"] = @(imgMatrix.showFilenames);
+	d[@"autoRotate"] = @(imgMatrix.autoRotate);
+	d[@"directoryBrowserVisible"] = @(self.directoryBrowserVisible);
+	d[@"browserHeight"] = @(_savedBrowserHeight);
+	d[@"pathBarVisible"] = @(self.pathBarVisible);
+	d[@"cellWidth"] = @(imgMatrix.cellWidth);
+	return d;
+}
+
+// Apply a saved state: set list-affecting bits first (no reload), then navigate once and
+// let the loader select the remembered file, then apply the view-only toggles.
+- (void)restoreState:(NSDictionary *)e {
+	if (e[@"sortOrder"]) self.sortOrder = [e[@"sortOrder"] shortValue];
+	self.recurseRoot = e[@"recurseRoot"]; // may be nil
+	[self setWantsSubfolders:[e[@"wantsSubfolders"] boolValue]];
+	self.subfoldersButton.state = self.wantsSubfolders ? NSControlStateValueOn : NSControlStateValueOff;
+	_showUnsupportedFiles = [e[@"showUnsupportedFiles"] boolValue]; // direct: avoid a redundant reload
+	self.unsupportedButton.state = _showUnsupportedFiles ? NSControlStateValueOn : NSControlStateValueOff;
+	// view-only toggles (no directory reload needed)
+	if ([e[@"browserHeight"] doubleValue] > 0) _savedBrowserHeight = [e[@"browserHeight"] doubleValue];
+	imgMatrix.showFilenames = [e[@"showFilenames"] boolValue];
+	imgMatrix.autoRotate = [e[@"autoRotate"] boolValue];
+	if ([e[@"cellWidth"] floatValue] > 0) imgMatrix.cellWidth = [e[@"cellWidth"] floatValue];
+	self.pathBarVisible = [e[@"pathBarVisible"] boolValue];
+	self.directoryBrowserVisible = [e[@"directoryBrowserVisible"] boolValue];
+	// navigate + select the remembered file after the async load (reuses openFiles:)
+	NSString *focused = e[@"focusedFile"];
+	if ([focused isKindOfClass:NSString.class] && focused.length)
+		[self openFiles:@[focused] withSlideshow:NO];
+	else
+		[self setPath:e[@"path"]];
+}
+
 - (BOOL)currentFilesDeletable { return currentFilesDeletable; }
 - (BOOL)filenamesDone { return filenamesDone; }
 - (NSArray *)displayedFilenames { return displayedFilenames; }
@@ -931,6 +978,7 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 		}
 		filenamesDone = YES;
 		//NSLog(@"got %d files.", [filenames count]);
+		dispatch_async(dispatch_get_main_queue(), ^{ [appDelegate noteRecentFolderForWindow:self]; }); // Open Recent: record the folder we just loaded
 	}
 #pragma mark populate matrix
 	@autoreleasepool {
@@ -1360,6 +1408,7 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	}
 	bottomStatusFld.stringValue = s;
 	[self updateExifInfo];
+	[appDelegate noteRecentFolderForWindow:self]; // Open Recent: keep the folder's focused-file current
 }
 
 - (NSImage *)wrappingMatrixWantsImageForFile:(NSString *)filename atIndex:(NSUInteger)i {

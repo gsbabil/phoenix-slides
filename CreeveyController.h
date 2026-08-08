@@ -8,7 +8,7 @@
 @import Cocoa;
 #define CREEVEY_DEFAULT_PATH [@"~/Pictures" stringByResolvingSymlinksInPath]
 
-@class DYImageCache, SlideshowWindow, DYJpegtranPanel, KeyBindings;
+@class DYImageCache, SlideshowWindow, DYJpegtranPanel, KeyBindings, CreeveyMainWindowController;
 
 NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache *cache, BOOL moreExif);
 
@@ -40,6 +40,7 @@ CGFloat DYInterfaceTextScale(void);
 NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders);
 - (BOOL)handledDirectory:(NSURL *)url subfolders:(BOOL)recurse e:(NSDirectoryEnumerator *)e;
 - (BOOL)shouldShowFile:(NSURL *)path;
+- (void)noteRecentFolderForWindow:(CreeveyMainWindowController *)wc; // Open Recent: record the window's current folder+state
 - (BOOL)shouldShowFile:(NSURL *)url includingUnsupported:(BOOL)includeUnsupported;
 
 - (IBAction)slideshow:(id)sender;

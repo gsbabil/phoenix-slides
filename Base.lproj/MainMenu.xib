@@ -108,6 +108,19 @@
                                     <action selector="goToFolder:" target="207" id="GtF-ac-002"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Open Recent" id="ORc-mi-001">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Open Recent" autoenablesItems="NO" id="ORc-menu-001">
+                                    <items>
+                                        <menuItem title="No Recent Folders" enabled="NO" id="ORc-ph-001">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                        </menuItem>
+                                    </items>
+                                    <connections>
+                                        <outlet property="delegate" destination="207" id="ORc-del-001"/>
+                                    </connections>
+                                </menu>
+                            </menuItem>
                             <menuItem title="Close Window" keyEquivalent="w" id="499">
                                 <connections>
                                     <action selector="performClose:" target="-1" id="500"/>

@@ -353,6 +353,36 @@
                                                 <binding destination="551" name="value" keyPath="values.copyPathnameShellQuoted" id="Cpq-bnd-003"/>
                                             </connections>
                                         </button>
+                                        <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="ORp-lbl-001">
+                                            <rect key="frame" x="20" y="70" width="120" height="16"/>
+                                            <textFieldCell key="cell" sendsActionOnEndEditing="YES" title="Open Recent count:" id="ORp-lbc-001">
+                                                <font key="font" metaFont="system"/>
+                                                <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                                            </textFieldCell>
+                                        </textField>
+                                        <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="ORp-fld-001">
+                                            <rect key="frame" x="148" y="67" width="46" height="22"/>
+                                            <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" sendsActionOnEndEditing="YES" alignment="right" borderStyle="bezel" drawsBackground="YES" id="ORp-fcl-001">
+                                                <numberFormatter key="formatter" formatterBehavior="default10_4" numberStyle="decimal" maximumFractionDigits="0" id="ORp-fmt-001">
+                                                    <real key="minimum" value="1"/>
+                                                    <real key="maximum" value="50"/>
+                                                </numberFormatter>
+                                                <font key="font" metaFont="message"/>
+                                                <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                                <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                            </textFieldCell>
+                                            <connections>
+                                                <binding destination="551" name="value" keyPath="values.recentFoldersMax" id="ORp-fvb-001"/>
+                                            </connections>
+                                        </textField>
+                                        <stepper verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="ORp-stp-001">
+                                            <rect key="frame" x="197" y="64" width="19" height="27"/>
+                                            <stepperCell key="cell" continuous="YES" alignment="left" increment="1" minValue="1" maxValue="50" doubleValue="10" id="ORp-scl-001"/>
+                                            <connections>
+                                                <binding destination="551" name="value" keyPath="values.recentFoldersMax" id="ORp-svb-001"/>
+                                            </connections>
+                                        </stepper>
                                         <button translatesAutoresizingMaskIntoConstraints="NO" id="548">
                                             <rect key="frame" x="20" y="67" width="217" height="16"/>
                                             <buttonCell key="cell" type="check" title="Automatically check for updates" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="818">

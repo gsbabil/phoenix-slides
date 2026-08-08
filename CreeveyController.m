@@ -376,7 +376,10 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 	NSMutableArray *creeveyWindows;
 	CreeveyMainWindowController * __weak frontWindow;
 	NSArray *_prefWinNibItems;
-	
+
+	NSMutableArray<NSDictionary *> *_recentFolders; // Open Recent: in-memory, most-recent-first
+	BOOL _recentFoldersDirty;                        // unsaved changes since last flush
+
 	DYImageCache *thumbsCache;
 	
 	id localeChangeObserver;
@@ -434,6 +437,8 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 		@"interfaceTextSize":@0, // 0 small (current), 1 medium, 2 large, 3 custom
 		@"interfaceTextCustomSize":@13, // point size when interfaceTextSize == 3 (custom)
 		@"copyPathnameShellQuoted":@YES, // Copy as Pathname: YES = shell-quoted, NO = Finder-style raw
+		@"recentFolders":@[],            // Open Recent list (array of state dicts, most-recent-first)
+		@"recentFoldersMax":@10,         // how many recent folders to remember
 	}];
 
 	[NSValueTransformer setValueTransformer:[[TimeIntervalPlusWeekToStringTransformer alloc] init]
@@ -673,6 +678,112 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	NSPasteboard *pb = NSPasteboard.generalPasteboard;
 	[pb clearContents];
 	[pb setString:text forType:NSPasteboardTypeString];
+}
+
+#pragma mark Open Recent
+- (NSMutableArray<NSDictionary *> *)recentFolders {
+	if (!_recentFolders) {
+		NSArray *saved = [NSUserDefaults.standardUserDefaults arrayForKey:@"recentFolders"];
+		_recentFolders = saved ? [saved mutableCopy] : [NSMutableArray array];
+	}
+	return _recentFolders;
+}
+
+// Upsert the window's current folder to the top of the list with its full state.
+- (void)noteRecentFolderForWindow:(CreeveyMainWindowController *)wc {
+	NSDictionary *state = wc.currentStateDictionary;
+	if (!state) return;
+	NSString *path = state[@"path"];
+	NSMutableArray *list = self.recentFolders;
+	NSUInteger existing = [list indexOfObjectPassingTest:^BOOL(NSDictionary *e, NSUInteger idx, BOOL *stop){
+		return [e[@"path"] isEqual:path];
+	}];
+	if (existing != NSNotFound) [list removeObjectAtIndex:existing];
+	[list insertObject:state atIndex:0];
+	NSInteger max = MAX(1, [NSUserDefaults.standardUserDefaults integerForKey:@"recentFoldersMax"]);
+	while ((NSInteger)list.count > max) [list removeLastObject];
+	_recentFoldersDirty = YES;
+}
+
+- (void)flushRecentFolders {
+	if (!_recentFoldersDirty) return;
+	[NSUserDefaults.standardUserDefaults setObject:_recentFolders forKey:@"recentFolders"];
+	_recentFoldersDirty = NO;
+}
+
+// NSMenuDelegate for the File > Open Recent submenu (delegate wired in MainMenu.xib).
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+	if (frontWindow) [self noteRecentFolderForWindow:frontWindow]; // reflect the current folder's latest state
+	[self flushRecentFolders];
+	menu.autoenablesItems = NO; // we set each item's enabled state explicitly
+	[menu removeAllItems];
+	NSMutableArray *list = self.recentFolders;
+	NSFileManager *fm = NSFileManager.defaultManager;
+	BOOL hasInvalid = NO;
+	if (list.count == 0) {
+		NSMenuItem *none = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"No Recent Folders", @"") action:NULL keyEquivalent:@""];
+		none.enabled = NO;
+		[menu addItem:none];
+	} else {
+		for (NSDictionary *e in list) {
+			NSString *path = e[@"path"];
+			BOOL exists = [fm fileExistsAtPath:path];
+			if (!exists) hasInvalid = YES;
+			NSMenuItem *mi = [[NSMenuItem alloc] initWithTitle:(e[@"displayPath"] ?: path)
+														action:@selector(openRecentFolder:) keyEquivalent:@""];
+			mi.target = self;
+			mi.representedObject = e;
+			mi.enabled = exists; // missing folders greyed out
+			NSImage *icon = [NSWorkspace.sharedWorkspace iconForFile:path];
+			icon.size = NSMakeSize(16, 16);
+			mi.image = icon;
+			[menu addItem:mi];
+		}
+	}
+	[menu addItem:NSMenuItem.separatorItem];
+	NSMenuItem *removeInvalid = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Remove Invalid", @"")
+														   action:@selector(removeInvalidRecent:) keyEquivalent:@""];
+	removeInvalid.target = self;
+	removeInvalid.enabled = hasInvalid;
+	[menu addItem:removeInvalid];
+	NSMenuItem *clear = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Clear Menu", @"")
+												   action:@selector(clearRecentMenu:) keyEquivalent:@""];
+	clear.target = self;
+	clear.enabled = list.count > 0;
+	[menu addItem:clear];
+}
+
+- (IBAction)openRecentFolder:(NSMenuItem *)sender {
+	NSDictionary *e = sender.representedObject;
+	if (![e isKindOfClass:NSDictionary.class]) return;
+	if (![NSFileManager.defaultManager fileExistsAtPath:e[@"path"]]) { NSBeep(); return; }
+	CreeveyMainWindowController *wc = frontWindow;
+	if (!wc || !creeveyWindows.count) {
+		[self newWindow:nil]; // open a browser window if none exists (init:NO — restoreState sets the path)
+		wc = creeveyWindows.lastObject;
+	}
+	[wc showWindow:nil];
+	[wc.window makeKeyAndOrderFront:nil];
+	[wc restoreState:e];
+}
+
+- (IBAction)clearRecentMenu:(id)sender {
+	[self.recentFolders removeAllObjects];
+	_recentFoldersDirty = YES;
+	[self flushRecentFolders];
+}
+
+- (IBAction)removeInvalidRecent:(id)sender {
+	NSFileManager *fm = NSFileManager.defaultManager;
+	NSMutableArray *list = self.recentFolders;
+	NSIndexSet *invalid = [list indexesOfObjectsPassingTest:^BOOL(NSDictionary *e, NSUInteger idx, BOOL *stop){
+		return ![fm fileExistsAtPath:e[@"path"]];
+	}];
+	if (invalid.count) {
+		[list removeObjectsAtIndexes:invalid];
+		_recentFoldersDirty = YES;
+		[self flushRecentFolders];
+	}
 }
 
 - (IBAction)setDesktopPicture:(id)sender {
@@ -1450,6 +1561,8 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	NSUserDefaults *u = NSUserDefaults.standardUserDefaults;
 	if (creeveyWindows.count)
 		[frontWindow updateDefaults];
+	if (frontWindow) [self noteRecentFolderForWindow:frontWindow]; // capture the current folder's final state
+	[self flushRecentFolders];
 	[u setBool:(slidesWindow.isMainWindow || creeveyWindows.count == 0) ? exifWasVisible : exifTextView.window.visible
 		forKey:@"getInfoVisible"];
 	[u synchronize];
@@ -1700,17 +1813,20 @@ enum {
 	frontWindow.imageMatrix.showFilenames = b;
 	if (creeveyWindows.count == 1) // save as default if this is the only window
 		[NSUserDefaults.standardUserDefaults setBool:b forKey:@"showFilenames"];
+	[self noteRecentFolderForWindow:frontWindow];
 }
 
 - (IBAction)togglePathBar:(id)sender {
 	frontWindow.pathBarVisible = !frontWindow.pathBarVisible;
 	[NSUserDefaults.standardUserDefaults setBool:frontWindow.pathBarVisible forKey:@"showPathBar"];
+	[self noteRecentFolderForWindow:frontWindow];
 }
 
 - (IBAction)toggleDirectoryBrowser:(id)sender {
 	// the split view persists its own position (MainWindowSplitViewTopHeight), so the
 	// collapsed state is remembered across launches without a separate preference
 	frontWindow.directoryBrowserVisible = !frontWindow.directoryBrowserVisible;
+	[self noteRecentFolderForWindow:frontWindow];
 }
 
 - (IBAction)toggleUnsupportedFiles:(id)sender {
@@ -1726,6 +1842,7 @@ enum {
 	slidesWindow.autoRotate = b;
 	if (creeveyWindows.count == 1 || slidesWindow.isMainWindow)
 		[NSUserDefaults.standardUserDefaults setBool:b forKey:@"autoRotateByOrientationTag"];
+	if (!slidesWindow.isMainWindow) [self noteRecentFolderForWindow:frontWindow];
 }
 
 #pragma mark prefs stuff
@@ -2026,6 +2143,8 @@ static void SendAction(NSMenuItem *sender) {
 - (void)windowClosed:(NSNotification *)n {
 	NSWindowController *wc = [n.object windowController];
 	if ([creeveyWindows indexOfObjectIdenticalTo:wc] != NSNotFound) {
+		[self noteRecentFolderForWindow:(CreeveyMainWindowController *)wc]; // capture the closing window's folder+state
+		[self flushRecentFolders];
 		if (wc.window == frontWindow.window) {
 			// for some reason closing a tab will call windowChanged: (with the new window) before windowClosed: (with the old window)
 			frontWindow = nil;

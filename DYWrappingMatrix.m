@@ -950,7 +950,9 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 }
 
 - (NSString *)firstSelectedFilename {
-	return filenames[selectedIndexes.firstIndex];
+	NSUInteger i = selectedIndexes.firstIndex;
+	// selection can momentarily be empty or stale relative to filenames (e.g. mid-reload)
+	return i < filenames.count ? filenames[i] : nil;
 }
 
 - (IBAction)selectAll:(id)sender {
