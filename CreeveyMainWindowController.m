@@ -937,11 +937,16 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 
 - (void)updateStatusFld {
 	id s = NSLocalizedString(@"%u images", @"");
-	NSString *status = currCat
-		? [NSString stringWithFormat:@"%@: %@",
+	NSString *status;
+	if (currCat)
+		status = [NSString stringWithFormat:@"%@: %@",
 			[NSString stringWithFormat:NSLocalizedString(@"Group %i", @""), currCat],
-			[NSString stringWithFormat:s, displayedFilenames.count]]
-		: [NSString stringWithFormat:s, filenames.count];
+			[NSString stringWithFormat:s, displayedFilenames.count]];
+	else if (_searchQuery.length) // filtering: show matches of the folder total
+		status = [NSString stringWithFormat:NSLocalizedString(@"%u of %u images", @""),
+			(unsigned)displayedFilenames.count, (unsigned)filenames.count];
+	else
+		status = [NSString stringWithFormat:s, filenames.count];
 	[self updateStatusString:status];
 }
 
