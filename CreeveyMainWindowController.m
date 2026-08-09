@@ -1197,6 +1197,9 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 
 
 #pragma mark menu stuff
+- (void)copy:(id)sender {
+	[imgMatrix copy:sender]; // so Cmd-C copies the grid selection even from the directory browser
+}
 - (void)selectAll:(id)sender{
 	[self.window makeFirstResponder:imgMatrix];
 	[imgMatrix selectAll:sender];

@@ -58,11 +58,16 @@ CGFloat DYInterfaceTextScale(void); // defined in CreeveyController.m
 @implementation DYCreeveyBrowserMatrix
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
 	if (menuItem.action == @selector(selectAll:)) return YES;
+	if (menuItem.action == @selector(copy:))
+		return [(CreeveyMainWindowController *)self.window.delegate selectedIndexes].count > 0;
 	if ([menuItem.target isKindOfClass:[DYCreeveyBrowser class]]) return YES;
 	return [super validateMenuItem:menuItem];
 }
 - (void)selectAll:(id)sender {
 	[(CreeveyMainWindowController *)self.window.delegate selectAll:sender]; // to pass it to image matrix
+}
+- (void)copy:(id)sender {
+	[(CreeveyMainWindowController *)self.window.delegate copy:sender]; // pass Cmd-C through to the image matrix
 }
 - (void)keyDown:(NSEvent *)e {
 	unichar c = 0;

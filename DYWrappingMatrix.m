@@ -101,6 +101,8 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	float cellWidth;
 	NSUInteger numCells;
 	NSMutableIndexSet *selectedIndexes;
+	NSUInteger _selAnchor, _selCursor; // keyboard range-selection pivot and moving end
+	BOOL _keyboardSelValid;            // NO after a mouse/select-all change, so keys re-sync
 	
 	BOOL dragEntered;
 	
@@ -427,6 +429,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 #pragma mark event stuff
 - (void)mouseDown:(NSEvent *)theEvent {
 	[self.window makeFirstResponder:self];
+	_keyboardSelValid = NO; // mouse changed the selection; let keyboard re-derive its cursor
 	if (numCells == 0) return;
 	BOOL keepOn = YES;
 	char doDrag = 0;
@@ -822,17 +825,50 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	[self notifySelectionDidChange];
 }
 
+// Replace the selection with a single cell (plain arrow / Home / End).
+- (void)setSingleSelection:(NSUInteger)n {
+	NSMutableIndexSet *dirty = [selectedIndexes mutableCopy];
+	[selectedIndexes removeAllIndexes];
+	[selectedIndexes addIndex:n];
+	[dirty addIndex:n];
+	for (NSUInteger i = dirty.firstIndex; i != NSNotFound; i = [dirty indexGreaterThanIndex:i])
+		[self selectionNeedsDisplay:i];
+	_selAnchor = _selCursor = n;
+	_keyboardSelValid = YES;
+	[self scrollSelectionToVisible:n]; // notifies + scrolls
+}
+
+// Extend the selection from the anchor to n (shift + arrow / Home / End).
+- (void)extendSelectionTo:(NSUInteger)n {
+	NSUInteger anchor = (_keyboardSelValid && _selAnchor < numCells) ? _selAnchor
+		: (selectedIndexes.count ? selectedIndexes.firstIndex : n);
+	NSMutableIndexSet *dirty = [selectedIndexes mutableCopy];
+	[selectedIndexes removeAllIndexes];
+	NSUInteger lo = MIN(anchor, n), hi = MAX(anchor, n);
+	[selectedIndexes addIndexesInRange:NSMakeRange(lo, hi - lo + 1)];
+	[dirty addIndexes:selectedIndexes];
+	for (NSUInteger i = dirty.firstIndex; i != NSNotFound; i = [dirty indexGreaterThanIndex:i])
+		[self selectionNeedsDisplay:i];
+	_selAnchor = anchor;
+	_selCursor = n;
+	_keyboardSelValid = YES;
+	[self scrollSelectionToVisible:n];
+}
+
 - (void)keyDown:(NSEvent *)e {
 	if (e.characters.length == 0) return;
 	unichar c = [e.characters characterAtIndex:0];
+	BOOL shift = (e.modifierFlags & NSEventModifierFlagShift) != 0;
 	NSRect r;
 	switch (c) {
 		case NSHomeFunctionKey:
+			if (shift && numCells) { [self extendSelectionTo:0]; return; }
 			r = [self cellnum2rect:0];
 			r.size.height = (int)r.size.height;
 			[self scrollRectToVisible:r];
 			return;
 		case NSEndFunctionKey:
+			if (shift && numCells) { [self extendSelectionTo:numCells-1]; return; }
 			r = [self cellnum2rect:filenames.count-1];
 			r.size.height = (int)r.size.height;
 			[self scrollRectToVisible:r];
@@ -851,40 +887,26 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 				[super keyDown:e];
 			return;
 	}
+	if (numCells == 0) return;
+	BOOL forward = (c == NSRightArrowFunctionKey || c == NSDownArrowFunctionKey);
+	// the moving end: the keyboard cursor, falling back to the current selection edge
+	NSUInteger base = (_keyboardSelValid && _selCursor < numCells) ? _selCursor
+		: (selectedIndexes.count ? (forward ? selectedIndexes.lastIndex : selectedIndexes.firstIndex) : NSNotFound);
 	NSUInteger n;
-	if (selectedIndexes.count == 1) {
-		n = selectedIndexes.firstIndex;
-		[self selectionNeedsDisplay:n];
+	if (base == NSNotFound) {
+		n = forward ? 0 : numCells - 1; // empty selection: enter at the near edge, no move
+	} else {
+		n = base;
 		switch (c) {
-			case NSRightArrowFunctionKey: if (n<numCells-1) n++; break;
-			case NSLeftArrowFunctionKey:  if (n>0) n--; break;
-			case NSDownArrowFunctionKey:
-				if ((numCells - 1 - n) < numCols) n = numCells-1;
-				else n += numCols;
-				break;
-			case NSUpArrowFunctionKey:
-				if (numCols > n) n = 0;
-				else n -= numCols;
-				break;
+			case NSRightArrowFunctionKey: if (n < numCells-1) n++; break;
+			case NSLeftArrowFunctionKey:  if (n > 0) n--; break;
+			case NSDownArrowFunctionKey:  n = (numCells - 1 - n) < numCols ? numCells-1 : n + numCols; break;
+			case NSUpArrowFunctionKey:    n = numCols > n ? 0 : n - numCols; break;
 			default: break;
 		}
-		[selectedIndexes removeAllIndexes];
-	} else if (selectedIndexes.count == 0 && numCells > 0) {
-		switch (c) {
-			case NSRightArrowFunctionKey:
-			case NSDownArrowFunctionKey:
-				n = 0;
-				break;
-			case NSLeftArrowFunctionKey:
-			case NSUpArrowFunctionKey:
-			default: // keep the compiler happy about n
-				n = numCells-1;
-				break;
-		}
-	} else
-		return;
-	[selectedIndexes addIndex:n];
-	[self scrollSelectionToVisible:n];
+	}
+	if (shift && base != NSNotFound) [self extendSelectionTo:n];
+	else [self setSingleSelection:n];
 }
 
 - (void)selectIndex:(NSUInteger)i {
@@ -961,6 +983,7 @@ static NSRect ScaledCenteredRect(NSSize sourceSize, NSRect boundsRect) {
 	for (i=0; i<numCells; ++i) {
 		[self selectionNeedsDisplay:i];
 	}
+	_keyboardSelValid = NO;
 	[self notifySelectionDidChange];
 }
 

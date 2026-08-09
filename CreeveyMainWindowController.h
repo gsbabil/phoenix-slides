@@ -30,6 +30,7 @@
 @property (nonatomic, readonly) NSArray *currentSelection;
 @property (nonatomic, readonly) NSIndexSet *selectedIndexes;
 - (void)selectIndex:(NSUInteger)i;
+- (IBAction)copy:(id)sender; // forwards Cmd-C to the thumbnail grid (also called from the dir browser)
 @property (nonatomic, readonly) NSArray *displayedFilenames;
 - (NSUInteger)indexOfFilename:(NSString *)s;
 @property (nonatomic, readonly) BOOL currentFilesDeletable;
