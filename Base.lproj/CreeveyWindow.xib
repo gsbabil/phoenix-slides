@@ -70,9 +70,9 @@ DQ
                                     </customView>
                                     <button toolTip="Search all subfolders for images (slower)." horizontalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="370">
                                         <rect key="frame" x="272" y="7" width="98" height="16"/>
-                                        <buttonCell key="cell" type="check" title="Subfolders ⌘⇧F" bezelStyle="regularSquare" imagePosition="left" alignment="left" controlSize="small" inset="2" id="517">
+                                        <buttonCell key="cell" type="check" title="Subfolders ⌘⇧F" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="517">
                                             <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                                            <font key="font" metaFont="smallSystem"/>
+                                            <font key="font" metaFont="system"/>
                                         </buttonCell>
                                         <connections>
                                             <action selector="setRecurseSubfolders:" target="-2" id="505"/>
@@ -80,9 +80,9 @@ DQ
                                     </button>
                                     <button toolTip="Show files the app can't display; preview them with Quick Look." horizontalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Uns-btn-901">
                                         <rect key="frame" x="378" y="7" width="104" height="16"/>
-                                        <buttonCell key="cell" type="check" title="Unsupported ⌥⌘U" bezelStyle="regularSquare" imagePosition="left" alignment="left" controlSize="small" inset="2" id="Uns-cel-902">
+                                        <buttonCell key="cell" type="check" title="Unsupported ⌥⌘U" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="Uns-cel-902">
                                             <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                                            <font key="font" metaFont="smallSystem"/>
+                                            <font key="font" metaFont="system"/>
                                         </buttonCell>
                                         <connections>
                                             <action selector="toggleUnsupportedFilesButton:" target="-2" id="Uns-act-903"/>

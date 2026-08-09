@@ -274,8 +274,8 @@ typedef struct {
 	NSView *pane = statusFld.superview;
 	_searchField = [[NSSearchField alloc] initWithFrame:NSZeroRect];
 	_searchField.translatesAutoresizingMaskIntoConstraints = NO;
-	_searchField.controlSize = NSControlSizeSmall;
-	_searchField.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+	_searchField.controlSize = NSControlSizeRegular;
+	_searchField.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
 	((NSSearchFieldCell *)_searchField.cell).placeholderString = NSLocalizedString(@"Filter", @"");
 	_searchField.sendsWholeSearchString = NO;
 	_searchField.sendsSearchStringImmediately = NO; // debounce a touch while typing
