@@ -307,6 +307,12 @@ typedef struct {
 	]];
 }
 
+// Focus the filter field, selecting any existing text so it can be retyped or edited.
+- (void)focusSearchField {
+	[self.window makeFirstResponder:_searchField];
+	[_searchField selectText:nil];
+}
+
 - (IBAction)searchFieldChanged:(id)sender {
 	NSString *q = _searchField.stringValue;
 	_searchQuery = q.length ? q : nil;

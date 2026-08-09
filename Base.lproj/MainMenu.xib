@@ -121,6 +121,12 @@
                                     </connections>
                                 </menu>
                             </menuItem>
+                            <menuItem title="Search" tag="29" keyEquivalent="f" id="Sch-mi-001">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                <connections>
+                                    <action selector="searchImages:" target="207" id="Sch-ac-002"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Close Window" keyEquivalent="w" id="499">
                                 <connections>
                                     <action selector="performClose:" target="-1" id="500"/>
@@ -146,14 +152,6 @@ IA
                             <menuItem isSeparatorItem="YES" id="485">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Set As Desktop Picture" tag="5" keyEquivalent="d" id="391">
-                                <connections>
-                                    <action selector="setDesktopPicture:" target="207" id="414"/>
-                                </connections>
-                            </menuItem>
-                            <menuItem isSeparatorItem="YES" id="79">
-                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
-                            </menuItem>
                             <menuItem title="Reveal In Finder" tag="1" keyEquivalent="r" id="341">
                                 <connections>
                                     <action selector="revealSelectedFilesInFinder:" target="207" id="344"/>
@@ -165,6 +163,7 @@ IA
                                     <action selector="copySelectedFilePaths:" target="207" id="Cpn-me-201"/>
                                 </connections>
                             </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Fsp-a1-001"/>
                             <menuItem title="Rename…" tag="16" id="Rn1-me-100">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
@@ -195,6 +194,7 @@ IA
                                     <action selector="copySelectedFilesAgain:" target="207" id="e5p-33-1uv"/>
                                 </connections>
                             </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Fsp-a2-001"/>
                             <menuItem title="Move To Trash" tag="2" id="343">
                                 <string key="keyEquivalent" base64-UTF8="YES">
 CA
@@ -210,6 +210,12 @@ CA
                                 <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
                                 <connections>
                                     <action selector="deleteSelectedFilesPermanently:" target="207" id="Dl2-me-103"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Fsp-a3-001"/>
+                            <menuItem title="Set As Desktop Picture" tag="5" keyEquivalent="d" id="391">
+                                <connections>
+                                    <action selector="setDesktopPicture:" target="207" id="414"/>
                                 </connections>
                             </menuItem>
                         </items>
@@ -330,6 +336,12 @@ CA
                                 <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
                                 <connections>
                                     <action selector="togglePathBar:" target="207" id="PBr-ac-002"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Search Subfolders" tag="30" keyEquivalent="f" id="Sbf-mi-001">
+                                <modifierMask key="keyEquivalentModifierMask" shift="YES" command="YES"/>
+                                <connections>
+                                    <action selector="toggleSubfolders:" target="207" id="Sbf-ac-002"/>
                                 </connections>
                             </menuItem>
                             <menuItem title="Show Unsupported Files" tag="27" keyEquivalent="u" id="Uns-mi-001">

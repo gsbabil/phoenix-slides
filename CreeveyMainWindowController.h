@@ -52,6 +52,7 @@
 - (void)openFiles:(NSArray *)a withSlideshow:(BOOL)b;
 - (void)fakeKeyDown:(NSEvent *)e;
 - (void)reloadInterfaceTextSize;
+- (void)focusSearchField; // File > Search: focus the filter field and select its text
 
 // notifiers
 - (void)fileWasChanged:(NSString *)s;

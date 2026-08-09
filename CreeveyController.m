@@ -1647,6 +1647,8 @@ enum {
 	SHOW_PATH_BAR = 26,
 	SHOW_UNSUPPORTED = 27,
 	COPY_PATHNAME = 28,
+	SEARCH = 29,
+	SUBFOLDERS = 30,
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -1739,6 +1741,11 @@ enum {
 			if (slidesWindow.isMainWindow) return NO;
 			return numSelected > 0 && frontWindow && frontWindow.window.isMainWindow && frontWindow.filenamesDone;
 		case GO_TO_FOLDER:
+			return !slidesWindow.isMainWindow && frontWindow != nil;
+		case SEARCH:
+			return !slidesWindow.isMainWindow && frontWindow != nil;
+		case SUBFOLDERS:
+			menuItem.state = frontWindow.wantsSubfolders;
 			return !slidesWindow.isMainWindow && frontWindow != nil;
 		case COPY_PATHNAME:
 			return !slidesWindow.isMainWindow && numSelected > 0;
@@ -1845,6 +1852,17 @@ enum {
 	if (creeveyWindows.count == 1 || slidesWindow.isMainWindow)
 		[NSUserDefaults.standardUserDefaults setBool:b forKey:@"autoRotateByOrientationTag"];
 	if (!slidesWindow.isMainWindow) [self noteRecentFolderForWindow:frontWindow];
+}
+
+- (IBAction)searchImages:(id)sender {
+	[frontWindow focusSearchField];
+}
+
+- (IBAction)toggleSubfolders:(id)sender {
+	// flip the Subfolders checkbox and run its normal action (sets recurseRoot, reloads)
+	NSButton *b = frontWindow.subfoldersButton;
+	b.state = b.state == NSControlStateValueOn ? NSControlStateValueOff : NSControlStateValueOn;
+	[frontWindow setRecurseSubfolders:b];
 }
 
 #pragma mark prefs stuff
