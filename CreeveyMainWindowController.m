@@ -212,6 +212,8 @@ typedef struct {
 	NSString *_searchQuery;              // current filter text ("" / nil = no filter)
 	BOOL _searchRegex;                   // treat the query as a regular expression
 	NSRegularExpression *_searchRegexCompiled; // compiled query when in regex mode (nil if invalid)
+	NSWindow *_searchTipWindow;          // instant (no-delay) hover tip for the filter field
+	NSTextField *_searchTipField;
 }
 @synthesize dirBrowser, slidesBtn, imgMatrix, statusFld, bottomStatusFld;
 
@@ -277,6 +279,10 @@ typedef struct {
 	_searchField.controlSize = NSControlSizeRegular;
 	_searchField.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
 	((NSSearchFieldCell *)_searchField.cell).placeholderString = NSLocalizedString(@"Filter", @"");
+	// instant (no system delay) hover tip explaining the regex option; see mouseEntered:/showSearchTip
+	[_searchField addTrackingArea:[[NSTrackingArea alloc] initWithRect:NSZeroRect
+		options:NSTrackingMouseEnteredAndExited|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect
+		owner:self userInfo:nil]];
 	_searchField.sendsWholeSearchString = NO;
 	_searchField.sendsSearchStringImmediately = NO; // debounce a touch while typing
 	_searchField.target = self;
@@ -313,7 +319,51 @@ typedef struct {
 	[_searchField selectText:nil];
 }
 
+// Instant hover tip for the filter field (the system tool tip's delay hides the regex option).
+- (void)mouseEntered:(NSEvent *)e { [self showSearchTip]; }
+- (void)mouseExited:(NSEvent *)e { [_searchTipWindow orderOut:nil]; }
+
+- (void)showSearchTip {
+	if (!_searchTipWindow) {
+		NSView *bg = [[NSView alloc] initWithFrame:NSZeroRect];
+		bg.wantsLayer = YES;
+		bg.layer.cornerRadius = 4;
+		bg.layer.borderWidth = 0.5;
+		_searchTipField = [NSTextField labelWithString:@""];
+		_searchTipField.font = [NSFont toolTipsFontOfSize:0];
+		[bg addSubview:_searchTipField];
+		_searchTipWindow = [[NSWindow alloc] initWithContentRect:NSZeroRect styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+		_searchTipWindow.opaque = NO;
+		_searchTipWindow.backgroundColor = NSColor.clearColor;
+		_searchTipWindow.hasShadow = YES;
+		_searchTipWindow.level = NSPopUpMenuWindowLevel;
+		_searchTipWindow.ignoresMouseEvents = YES;
+		_searchTipWindow.contentView = bg;
+	}
+	_searchTipWindow.appearance = self.window.effectiveAppearance;
+	NSView *bg = _searchTipWindow.contentView;
+	bg.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;
+	bg.layer.borderColor = [NSColor.gridColor colorWithAlphaComponent:0.8].CGColor;
+	_searchTipField.textColor = NSColor.controlTextColor;
+	_searchTipField.stringValue = NSLocalizedString(@"Type to filter by name; click the magnifier for a regular-expression option.", @"");
+	[_searchTipField sizeToFit];
+	const CGFloat padX = 6, padY = 3;
+	NSSize fs = _searchTipField.frame.size;
+	_searchTipField.frameOrigin = NSMakePoint(padX, padY);
+	NSRect wf = NSMakeRect(0, 0, ceil(fs.width) + padX*2, ceil(fs.height) + padY*2);
+	NSRect field = [self.window convertRectToScreen:[_searchField convertRect:_searchField.bounds toView:nil]];
+	wf.origin.x = round(NSMinX(field));
+	wf.origin.y = round(NSMinY(field) - wf.size.height - 3); // just below the field
+	NSRect vis = (self.window.screen ?: NSScreen.mainScreen).visibleFrame;
+	if (NSMaxX(wf) > NSMaxX(vis)) wf.origin.x = NSMaxX(vis) - wf.size.width;
+	if (wf.origin.x < NSMinX(vis)) wf.origin.x = NSMinX(vis);
+	if (wf.origin.y < NSMinY(vis)) wf.origin.y = round(NSMaxY(field) + 3); // flip above if no room below
+	[_searchTipWindow setFrame:wf display:YES];
+	[_searchTipWindow orderFront:nil];
+}
+
 - (IBAction)searchFieldChanged:(id)sender {
+	[_searchTipWindow orderOut:nil]; // dismiss the hint once the user starts typing
 	NSString *q = _searchField.stringValue;
 	_searchQuery = q.length ? q : nil;
 	[self recompileSearch];
