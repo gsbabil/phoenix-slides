@@ -911,6 +911,10 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 
 	[NSApp endModalSession:session];
 	[jpegProgressBar.window orderOut:self];
+	// the slideshow refreshes via uncacheImage above; do the same for Quick Look, whose
+	// out-of-process render otherwise keeps showing the pre-transform image
+	if (QLPreviewPanel.sharedPreviewPanelExists && QLPreviewPanel.sharedPreviewPanel.isVisible)
+		[QLPreviewPanel.sharedPreviewPanel refreshCurrentPreviewItem];
 }
 
 - (IBAction)stopModal:(id)sender {
