@@ -1448,8 +1448,20 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	// this work (it can decode an image just to report its dimensions). endPreviewPanelControl
 	// calls us once when the panel closes to refresh for the file we landed on.
 	if (_quickLookActive) return;
+	// Coalesce the heavy work below (summing sizes stat()s every selected file; EXIF; the Open
+	// Recent note) so a rapid multi-select — mouse drag or shift+arrow — doesn't do O(files)
+	// syscalls on each change. A single/empty selection is cheap, so refresh it immediately.
+	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(updateSelectionInfo) object:nil];
+	if (selectedIndexes.count > 1)
+		[self performSelector:@selector(updateSelectionInfo) withObject:nil afterDelay:0.12];
+	else
+		[self updateSelectionInfo];
+}
+
+- (void)updateSelectionInfo {
+	if (_quickLookActive) return;
 	NSString *s;
-	NSUInteger count = selectedIndexes.count;
+	NSUInteger count = imgMatrix.selectedIndexes.count;
 	if (count == 0) {
 		s = @"";
 	} else {
@@ -1507,7 +1519,7 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 				}
 			}
 			s = [NSString stringWithFormat:@"%@ (%@)",
-				 [NSString stringWithFormat:NSLocalizedString(@"%d images selected.", @""), (unsigned int)selectedIndexes.count],
+				 [NSString stringWithFormat:NSLocalizedString(@"%d images selected.", @""), (unsigned int)count],
 				 FileSize2String(totalSize)];
 		}
 	}
