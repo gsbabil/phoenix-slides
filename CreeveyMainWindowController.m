@@ -208,6 +208,10 @@ typedef struct {
 	BOOL _directoryBrowserHidden;        // YES when only the control strip shows (browser hidden)
 	NSLayoutConstraint *_browserMinHeight, *_browserGap, *_browserZeroHeight;
 	BOOL _quickLookActive;               // YES while the Quick Look panel has control
+	NSSearchField *_searchField;         // filters the displayed thumbnails by filename
+	NSString *_searchQuery;              // current filter text ("" / nil = no filter)
+	BOOL _searchRegex;                   // treat the query as a regular expression
+	NSRegularExpression *_searchRegexCompiled; // compiled query when in regex mode (nil if invalid)
 }
 @synthesize dirBrowser, slidesBtn, imgMatrix, statusFld, bottomStatusFld;
 
@@ -260,6 +264,92 @@ typedef struct {
 	[NSUserDefaultsController.sharedUserDefaultsController addObserver:self forKeyPath:@"values.DYWrappingMatrixMaxCellWidth" options:0 context:NULL];
 	[self applyInterfaceTextSize];
 	[self setupPathBar];
+	[self setupSearchField];
+}
+
+#pragma mark search field
+// A filename filter in the control strip: statusFld | search | Unsupported | Subfolders | Slideshow.
+// Regex mode lives in the magnifier's menu (the strip has no room for another checkbox).
+- (void)setupSearchField {
+	NSView *pane = statusFld.superview;
+	_searchField = [[NSSearchField alloc] initWithFrame:NSZeroRect];
+	_searchField.translatesAutoresizingMaskIntoConstraints = NO;
+	_searchField.controlSize = NSControlSizeSmall;
+	_searchField.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+	((NSSearchFieldCell *)_searchField.cell).placeholderString = NSLocalizedString(@"Filter", @"");
+	_searchField.sendsWholeSearchString = NO;
+	_searchField.sendsSearchStringImmediately = NO; // debounce a touch while typing
+	_searchField.target = self;
+	_searchField.action = @selector(searchFieldChanged:);
+	NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+	NSMenuItem *rx = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Regular Expression", @"")
+												action:@selector(toggleSearchRegex:) keyEquivalent:@""];
+	rx.target = self;
+	rx.tag = 1;
+	[menu addItem:rx];
+	_searchField.searchMenuTemplate = menu; // magnifier dropdown → Regex toggle
+	[statusFld setContentCompressionResistancePriority:250 forOrientation:NSLayoutConstraintOrientationHorizontal]; // let the count text yield to the field
+	[pane addSubview:_searchField];
+	// splice the field into the row between the status text and the Unsupported checkbox
+	for (NSLayoutConstraint *c in pane.constraints.copy)
+		if (c.firstItem == self.unsupportedButton && c.firstAttribute == NSLayoutAttributeLeading &&
+			c.secondItem == statusFld && c.secondAttribute == NSLayoutAttributeTrailing) {
+			c.active = NO; break;
+		}
+	NSLayoutConstraint *preferredWidth = [_searchField.widthAnchor constraintEqualToConstant:160];
+	preferredWidth.priority = 250; // grow to ~160 if there's room, shrink otherwise
+	[NSLayoutConstraint activateConstraints:@[
+		[_searchField.leadingAnchor constraintEqualToAnchor:statusFld.trailingAnchor constant:8],
+		[self.unsupportedButton.leadingAnchor constraintEqualToAnchor:_searchField.trailingAnchor constant:8],
+		[_searchField.centerYAnchor constraintEqualToAnchor:self.unsupportedButton.centerYAnchor],
+		[_searchField.widthAnchor constraintGreaterThanOrEqualToConstant:70],
+		preferredWidth,
+	]];
+}
+
+- (IBAction)searchFieldChanged:(id)sender {
+	NSString *q = _searchField.stringValue;
+	_searchQuery = q.length ? q : nil;
+	[self recompileSearch];
+	[self refilter];
+}
+
+- (IBAction)toggleSearchRegex:(id)sender {
+	_searchRegex = !_searchRegex;
+	[self recompileSearch];
+	[self refilter];
+}
+
+// checkmark the "Regular Expression" item when the magnifier menu opens
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
+	if (menuItem.action == @selector(toggleSearchRegex:)) {
+		menuItem.state = _searchRegex ? NSControlStateValueOn : NSControlStateValueOff;
+		return YES;
+	}
+	return YES;
+}
+
+- (void)recompileSearch {
+	_searchRegexCompiled = nil;
+	if (_searchRegex && _searchQuery.length)
+		_searchRegexCompiled = [NSRegularExpression regularExpressionWithPattern:_searchQuery
+																		 options:NSRegularExpressionCaseInsensitive error:NULL];
+}
+
+// Re-filter the already-loaded files without re-reading the disk (same path loadImages: takes for sort/category).
+- (void)refilter {
+	[NSThread detachNewThreadSelector:@selector(loadImages:) toTarget:self withObject:nil];
+}
+
+// YES if a filename passes the current filter (no filter → always YES).
+- (BOOL)filenamePassesSearch:(NSString *)path {
+	if (!_searchQuery.length) return YES;
+	NSString *name = path.lastPathComponent;
+	if (_searchRegex) {
+		if (!_searchRegexCompiled) return YES; // invalid pattern: don't hide anything
+		return [_searchRegexCompiled numberOfMatchesInString:name options:0 range:NSMakeRange(0, name.length)] > 0;
+	}
+	return [name rangeOfString:_searchQuery options:NSCaseInsensitiveSearch].location != NSNotFound;
 }
 
 #pragma mark path bar
@@ -967,6 +1057,12 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 		} else {
 			[displayedFilenames setArray:filenames];
 		}
+		if (_searchQuery.length) { // filename filter (regex or case-insensitive substring)
+			NSMutableArray *filtered = [NSMutableArray arrayWithCapacity:displayedFilenames.count];
+			for (NSString *path in displayedFilenames)
+				if ([self filenamePassesSearch:path]) [filtered addObject:path];
+			[displayedFilenames setArray:filtered];
+		}
 		time(&matrixModTime);
 		if (startSlideshowWhenReady) {
 			startSlideshowWhenReady = NO;
@@ -1059,6 +1155,7 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	currentFilesDeletable = NO;
 	filenamesDone = NO;
 	currCat = 0;
+	if (_searchQuery.length) { _searchQuery = nil; _searchField.stringValue = @""; } // filter is per-folder; clear on navigation
 	slidesBtn.enabled = NO;
 	NSString *currentPath = [dirBrowserDelegate path];
 	_subfoldersButton.enabled = ![currentPath isEqualToString:@"/"]; // let's not ever load up the entire file system
