@@ -621,8 +621,8 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 			return;
 		}
 	}
-	BOOL fullscreen = [NSUserDefaults.standardUserDefaults integerForKey:@"slideshowDefaultMode"] == 0;
-	if (NSApp.currentEvent.modifierFlags & NSEventModifierFlagOption) fullscreen = !fullscreen;
+	// double-click (or Enter) opens a windowed slideshow; hold Option for full screen
+	BOOL fullscreen = (NSApp.currentEvent.modifierFlags & NSEventModifierFlagOption) != 0;
 	[self startSlideshowFullscreen:fullscreen];
 }
 
