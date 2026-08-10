@@ -494,6 +494,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 }
 
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
+	[CreeveyMainWindowController sweepLeftoverArchiveTemps]; // clear any extracted-archive leftovers from a prior run
 	[(NSPanel *)exifTextView.window setBecomesKeyOnlyIfNeeded:YES];
 	//[[exifTextView window] setHidesOnDeactivate:NO];
 	// this causes problems b/c the window can be foregrounded without the app
@@ -565,20 +566,26 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 			files = frontWindow.currentSelection;
 		}
 	}
-	if (frontWindow.showUnsupportedFiles) {
-		// the slideshow can't display unsupported files, so drop them from the list; if the
-		// file the user started on is one of them, open it in its default app and bail
+	{
+		// the slideshow can't display archives (or, when shown, other unsupported files), so drop
+		// them from the list; if the file the user started on is one of them, open/enter it and bail
 		NSString *startFile = (startIdx != NSNotFound && startIdx < files.count) ? files[startIdx] : nil;
 		if (startFile && ![self shouldShowFile:[NSURL fileURLWithPath:startFile]]) {
-			[NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:startFile]];
+			if ([frontWindow isArchivePath:startFile])
+				[frontWindow openArchive:startFile];
+			else
+				[NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:startFile]];
 			return;
 		}
-		NSMutableArray *supported = [NSMutableArray arrayWithCapacity:files.count];
+		NSUInteger n = files.count;
+		NSMutableArray *supported = [NSMutableArray arrayWithCapacity:n];
 		for (NSString *p in files)
 			if ([self shouldShowFile:[NSURL fileURLWithPath:p]]) [supported addObject:p];
-		if (!supported.count) return;
-		files = supported;
-		startIdx = startFile ? [files indexOfObject:startFile] : NSNotFound;
+		if (supported.count != n) { // something (an archive or unsupported file) was dropped
+			if (!supported.count) return;
+			files = supported;
+			startIdx = startFile ? [files indexOfObject:startFile] : startIdx;
+		}
 	}
 	if (wantsUpdates) {
 		[slidesWindow setFilenames:files basePath:frontWindow.path wantsSubfolders:frontWindow.wantsSubfolders comparator:frontWindow.comparator sortOrder:frontWindow.sortOrder];
@@ -611,6 +618,10 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 	// default app instead of the slideshow; a mixed selection still starts a slideshow of
 	// the supported files (unsupported ones are filtered out in startSlideshowFullscreen:)
 	NSArray *sel = frontWindow.currentSelection;
+	if (sel.count == 1 && [frontWindow isArchivePath:sel[0]]) { // open a .zip as a browsable folder
+		[frontWindow openArchive:sel[0]];
+		return;
+	}
 	if (sel.count) {
 		NSMutableArray *unsupported = [NSMutableArray array];
 		for (NSString *p in sel)
@@ -1572,6 +1583,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	[u setBool:(slidesWindow.isMainWindow || creeveyWindows.count == 0) ? exifWasVisible : exifTextView.window.visible
 		forKey:@"getInfoVisible"];
 	[u synchronize];
+	[CreeveyMainWindowController sweepLeftoverArchiveTemps]; // remove any extracted-archive temp dirs on quit
 }
 
 - (void)openFilesCoalesced {
@@ -2270,8 +2282,14 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 	return [filetypes containsObject:pathExtension] || ([fileostypes containsObject:NSHFSTypeOfFile(path)] && ![disabledFiletypes containsObject:pathExtension]);
 }
 
+- (BOOL)isArchiveURL:(NSURL *)url {
+	NSString *ext = url.pathExtension.lowercaseString;
+	return [ext isEqualToString:@"zip"] || [ext isEqualToString:@"cbz"];
+}
+
 - (BOOL)shouldShowFile:(NSURL *)url includingUnsupported:(BOOL)includeUnsupported {
 	if ([self shouldShowFile:url]) return YES;
+	if ([self isArchiveURL:url]) return YES; // archives are always browsable (double-click to enter)
 	if (!includeUnsupported) return NO;
 	// admit any other non-hidden file (directories are already handled by the caller); these
 	// can't be shown in-app but can be Quick Looked / opened in their default app

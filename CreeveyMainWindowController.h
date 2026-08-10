@@ -53,6 +53,9 @@
 - (void)fakeKeyDown:(NSEvent *)e;
 - (void)reloadInterfaceTextSize;
 - (void)focusSearchField; // File > Search: focus the filter field and select its text
+- (BOOL)isArchivePath:(NSString *)path; // YES for .zip/.cbz
+- (void)openArchive:(NSString *)zipPath; // extract a .zip to a temp folder and browse it
++ (void)sweepLeftoverArchiveTemps; // delete stale extracted-archive temp dirs (launch/quit only)
 
 // notifiers
 - (void)fileWasChanged:(NSString *)s;

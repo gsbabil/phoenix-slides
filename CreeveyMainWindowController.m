@@ -214,6 +214,11 @@ typedef struct {
 	NSRegularExpression *_searchRegexCompiled; // compiled query when in regex mode (nil if invalid)
 	NSWindow *_searchTipWindow;          // instant (no-delay) hover tip for the filter field
 	NSTextField *_searchTipField;
+	NSString *_archiveTempDir;           // temp dir a .zip is extracted into while browsing it
+	NSString *_archivePath;              // the original .zip path (remembered in Open Recent)
+	NSString *_archiveDisplayPath;       // clean logical path (zips shown as folders), for the path bar
+	NSString *_archiveDisplayName;       // the .zip's filename, shown as the window title
+	NSProgressIndicator *_archiveSpinner; // shown over the grid while an archive is extracting
 }
 @synthesize dirBrowser, slidesBtn, imgMatrix, statusFld, bottomStatusFld;
 
@@ -453,7 +458,9 @@ typedef struct {
 
 - (void)updatePathBar {
 	if (_pathControl.hidden) return;
-	NSString *p = self.path;
+	// for a mounted archive show the clean logical path (each .zip shown as a folder),
+	// never the raw extraction temp dir
+	NSString *p = _archiveTempDir ? _archiveDisplayPath : self.path;
 	_pathControl.URL = p.length ? [NSURL fileURLWithPath:p] : nil;
 }
 
@@ -560,6 +567,7 @@ typedef struct {
 }
 
 - (void)windowWillClose:(NSNotification *)notification {
+	[self cleanupArchiveTemp]; // don't leave an extracted archive behind
 	[self removeAllPathsFromAccessedFilesArray];
 	imageCacheQueueRunning = NO;
 	[imageCacheQueueLock lock];
@@ -592,10 +600,108 @@ typedef struct {
 		return NO;
 	if (!isDir)
 		s = s.stringByDeletingLastPathComponent;
+	if (_archiveTempDir && ![resolvedPath hasPrefix:_archiveTempDir])
+		[self cleanupArchiveTemp]; // navigated out of a mounted archive — discard its temp files
 	[dirBrowserDelegate setPath:s];
 	[dirBrowser sendAction];
 	[self.window invalidateRestorableState];
 	return YES;
+}
+
+#pragma mark archive (.zip) browsing
+- (BOOL)isArchivePath:(NSString *)path {
+	NSString *ext = path.pathExtension.lowercaseString;
+	return [ext isEqualToString:@"zip"] || [ext isEqualToString:@"cbz"];
+}
+
+// Extract a .zip/.cbz into a temp folder in the background and browse it immediately; the file
+// watcher streams entries into the grid as they extract, and a spinner shows work is ongoing.
+- (void)openArchive:(NSString *)zipPath {
+	NSString *tmp = [NSTemporaryDirectory() stringByAppendingPathComponent:
+		[@"PhoenixSlidesArchive-" stringByAppendingString:NSProcessInfo.processInfo.globallyUniqueString]];
+	if (![NSFileManager.defaultManager createDirectoryAtPath:tmp withIntermediateDirectories:YES attributes:nil error:NULL]) {
+		NSBeep(); return;
+	}
+	tmp = ResolveAliasToPath(tmp); // NSTemporaryDirectory lives under /var → /private/var; resolve so
+	                               // the setPath: cleanup guard below compares like-for-like
+	// Don't delete the previously-mounted archive yet: for a nested archive, zipPath lives *inside*
+	// it, so it must survive until ditto has finished reading it (below). Deleting it up front is
+	// what made "a .zip inside a .zip" extract nothing.
+	NSString *previousTemp = _archiveTempDir;
+	NSString *previousDisplay = _archiveDisplayPath;
+	[self showArchiveSpinner:NO];
+	// Clean logical path for the UI: a nested archive extends the outer archive's display path
+	// (treating each .zip as a folder) so we never surface a raw extraction temp path.
+	if (previousTemp && [zipPath hasPrefix:[previousTemp stringByAppendingString:@"/"]])
+		_archiveDisplayPath = [previousDisplay stringByAppendingString:[zipPath substringFromIndex:previousTemp.length]];
+	else
+		_archiveDisplayPath = zipPath; // top-level archive: its real .zip path
+	_archiveTempDir = tmp;
+	_archivePath = zipPath;
+	_archiveDisplayName = zipPath.lastPathComponent;
+	[self showArchiveSpinner:YES];
+	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+		NSTask *task = [[NSTask alloc] init];
+		task.executableURL = [NSURL fileURLWithPath:@"/usr/bin/ditto"];
+		task.arguments = @[@"-x", @"-k", zipPath, tmp]; // ditto -x -k = extract PKZip
+		[task launchAndReturnError:NULL];
+		[task waitUntilExit];
+		if (previousTemp) // safe now: we've finished reading zipPath (which may live inside it)
+			[NSFileManager.defaultManager removeItemAtPath:previousTemp error:NULL];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if ([self->_archiveTempDir isEqualToString:tmp]) { // still viewing this archive
+				[self showArchiveSpinner:NO];
+				[self displayDir:nil]; // final re-scan so nothing extracted early is missed
+			}
+		});
+	});
+	// point the directory browser at the .zip's own folder so the column browser and path bar
+	// agree (the grid itself loads from the temp dir below). Skip when the .zip lives inside an
+	// extraction temp dir — i.e. a nested archive — since that folder isn't a real location.
+	NSString *zipParent = zipPath.stringByDeletingLastPathComponent;
+	if ([zipParent rangeOfString:@"/PhoenixSlidesArchive-"].location == NSNotFound)
+		[dirBrowserDelegate setPath:zipParent]; // updates the browser columns without reloading the grid
+	// browse the temp dir directly via displayDir (the directory browser can't reliably navigate
+	// into a deep hidden temp path); the file watcher streams entries in as they extract
+	[self displayDir:nil];
+}
+
+// Remove every PhoenixSlidesArchive-* temp dir. Safe to call only when no archive is mounted
+// (i.e. at launch or termination); it's the safety net for leftovers from a crash or force-quit.
++ (void)sweepLeftoverArchiveTemps {
+	NSString *tmpRoot = NSTemporaryDirectory();
+	NSFileManager *fm = NSFileManager.defaultManager;
+	for (NSString *name in [fm contentsOfDirectoryAtPath:tmpRoot error:NULL])
+		if ([name hasPrefix:@"PhoenixSlidesArchive-"])
+			[fm removeItemAtPath:[tmpRoot stringByAppendingPathComponent:name] error:NULL];
+}
+
+- (void)cleanupArchiveTemp {
+	[self showArchiveSpinner:NO];
+	if (_archiveTempDir) {
+		[NSFileManager.defaultManager removeItemAtPath:_archiveTempDir error:NULL];
+		_archiveTempDir = nil;
+		_archivePath = nil;
+		_archiveDisplayPath = nil;
+		_archiveDisplayName = nil;
+	}
+}
+
+- (void)showArchiveSpinner:(BOOL)show {
+	if (show && !_archiveSpinner) {
+		_archiveSpinner = [[NSProgressIndicator alloc] init];
+		_archiveSpinner.style = NSProgressIndicatorStyleSpinning;
+		_archiveSpinner.displayedWhenStopped = NO;
+		_archiveSpinner.translatesAutoresizingMaskIntoConstraints = NO;
+		NSView *host = imgMatrix.enclosingScrollView;
+		[host.superview addSubview:_archiveSpinner positioned:NSWindowAbove relativeTo:host];
+		[NSLayoutConstraint activateConstraints:@[
+			[_archiveSpinner.centerXAnchor constraintEqualToAnchor:host.centerXAnchor],
+			[_archiveSpinner.centerYAnchor constraintEqualToAnchor:host.centerYAnchor],
+		]];
+	}
+	if (show) [_archiveSpinner startAnimation:nil];
+	else [_archiveSpinner stopAnimation:nil];
 }
 
 - (void)setDefaultPath {
@@ -636,13 +742,24 @@ typedef struct {
 #pragma mark Open Recent state
 // Snapshot the window's full navigable state (nil if no folder is loaded yet).
 - (NSDictionary *)currentStateDictionary {
-	NSString *unresolved = dirBrowserDelegate.unresolvedPath;
-	if (!unresolved.length) return nil;
-	NSString *focused = imgMatrix.firstSelectedFilename;
 	NSMutableDictionary *d = [NSMutableDictionary dictionary];
-	d[@"path"] = ResolveAliasToPath(unresolved);            // resolved: identity / existence
-	d[@"displayPath"] = unresolved.stringByAbbreviatingWithTildeInPath; // ~-abbreviated: menu title
-	d[@"focusedFile"] = focused ?: @"";
+	if (_archiveTempDir) {
+		// a nested archive's source .zip lives in a temp dir that won't survive — don't record it
+		// (it could never be reopened, and its path is ugly)
+		if ([_archivePath rangeOfString:@"/PhoenixSlidesArchive-"].location != NSNotFound) return nil;
+		// a mounted archive is remembered by its .zip path and re-extracted when reopened
+		d[@"isArchive"] = @YES;
+		d[@"path"] = ResolveAliasToPath(_archivePath);
+		d[@"displayPath"] = _archivePath.stringByAbbreviatingWithTildeInPath;
+		d[@"focusedFile"] = @""; // temp-dir paths don't survive a remount
+	} else {
+		NSString *unresolved = dirBrowserDelegate.unresolvedPath;
+		if (!unresolved.length) return nil;
+		NSString *focused = imgMatrix.firstSelectedFilename;
+		d[@"path"] = ResolveAliasToPath(unresolved);            // resolved: identity / existence
+		d[@"displayPath"] = unresolved.stringByAbbreviatingWithTildeInPath; // ~-abbreviated: menu title
+		d[@"focusedFile"] = focused ?: @"";
+	}
 	d[@"sortOrder"] = @(sortOrder);
 	d[@"wantsSubfolders"] = @(self.wantsSubfolders);
 	if (self.recurseRoot) d[@"recurseRoot"] = self.recurseRoot;
@@ -672,6 +789,10 @@ typedef struct {
 	if ([e[@"cellWidth"] floatValue] > 0) imgMatrix.cellWidth = [e[@"cellWidth"] floatValue];
 	self.pathBarVisible = [e[@"pathBarVisible"] boolValue];
 	self.directoryBrowserVisible = [e[@"directoryBrowserVisible"] boolValue];
+	if ([e[@"isArchive"] boolValue]) { // re-extract and browse the .zip
+		[self openArchive:e[@"path"]];
+		return;
+	}
 	// navigate + select the remembered file after the async load (reuses openFiles:)
 	NSString *focused = e[@"focusedFile"];
 	if ([focused isKindOfClass:NSString.class] && focused.length)
@@ -811,6 +932,10 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 }
 
 - (void)openFiles:(NSArray *)a withSlideshow:(BOOL)doSlides{
+	if (a.count == 1 && [self isArchivePath:a[0]]) { // dragged/opened a .zip — browse its contents
+		[self openArchive:a[0]];
+		return;
+	}
 	startSlideshowWhenReady = doSlides;
 	[filesBeingOpened addObjectsFromArray:a];
 	BOOL isDir;
@@ -1229,7 +1354,16 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	currCat = 0;
 	if (_searchQuery.length) { _searchQuery = nil; _searchField.stringValue = @""; } // filter is per-folder; clear on navigation
 	slidesBtn.enabled = NO;
-	NSString *currentPath = [dirBrowserDelegate path];
+	// A mounted archive is browsed straight from its temp dir (the NSBrowser can't reliably
+	// navigate into a deep hidden temp path). Our own refresh calls pass sender==nil; a non-nil
+	// sender means the user drove the directory browser, i.e. navigated out of the archive.
+	NSString *currentPath;
+	if (_archiveTempDir && sender == nil) {
+		currentPath = _archiveTempDir;
+	} else {
+		if (_archiveTempDir) [self cleanupArchiveTemp]; // user navigated the browser → leave the archive
+		currentPath = [dirBrowserDelegate path];
+	}
 	_subfoldersButton.enabled = ![currentPath isEqualToString:@"/"]; // let's not ever load up the entire file system
 	if (self.wantsSubfolders && sender) { // sender is dirBrowserDelegate when non-nil
 		if (![currentPath hasPrefix:_recurseRoot]) {
@@ -1238,7 +1372,10 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 		}
 	}
 	[self updateStatusString:NSLocalizedString(@"Getting filenames...", @"")];
-	[self.window setTitleWithRepresentedFilename:currentPath];
+	if (_archiveTempDir && sender == nil && _archiveDisplayName)
+		self.window.title = _archiveDisplayName; // show the archive name, not the temp path
+	else
+		[self.window setTitleWithRepresentedFilename:currentPath];
 	[self updatePathBar];
 	[NSThread detachNewThreadSelector:@selector(loadImages:)
 							 toTarget:self withObject:currentPath];
@@ -1568,8 +1705,14 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 						pixelSize = NSZeroSize;
 				}
 			}
-			NSUInteger idx = [dirBrowserDelegate path].length+1;
-			NSString *fileName = idx > path.length ? path : [path substringFromIndex:idx];
+			// show the file's name relative to the folder being browsed; for an archive that's
+			// the extraction temp dir, not the directory browser's path. If the file isn't under
+			// that base (e.g. a transient/other-archive entry), fall back to the bare filename so
+			// we never surface a raw temp-path fragment.
+			NSString *base = _archiveTempDir ?: [dirBrowserDelegate path];
+			NSString *fileName = [path hasPrefix:[base stringByAppendingString:@"/"]]
+				? [path substringFromIndex:base.length+1]
+				: path.lastPathComponent;
 			s = [fileName stringByAppendingFormat:@" %dx%d (%@)",
 				 (int)pixelSize.width, (int)pixelSize.height, FileSize2String(fileSize)];
 		} else {
