@@ -322,8 +322,15 @@ typedef struct {
 // Instant hover tip for the filter field (the system tool tip's delay hides the regex option).
 - (void)mouseEntered:(NSEvent *)e { [self showSearchTip]; }
 - (void)mouseExited:(NSEvent *)e { [_searchTipWindow orderOut:nil]; }
+- (void)windowDidResignKey:(NSNotification *)n { [_searchTipWindow orderOut:nil]; } // don't linger when unfocused
+
+- (BOOL)mouseIsOverSearchField {
+	NSPoint p = [_searchField convertPoint:self.window.mouseLocationOutsideOfEventStream fromView:nil];
+	return NSMouseInRect(p, _searchField.bounds, _searchField.isFlipped);
+}
 
 - (void)showSearchTip {
+	if (![self mouseIsOverSearchField]) { [_searchTipWindow orderOut:nil]; return; } // only when truly hovering the field
 	if (!_searchTipWindow) {
 		NSView *bg = [[NSView alloc] initWithFrame:NSZeroRect];
 		bg.wantsLayer = YES;
