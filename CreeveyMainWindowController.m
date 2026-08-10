@@ -426,6 +426,10 @@ typedef struct {
 	_pathControl.translatesAutoresizingMaskIntoConstraints = NO;
 	_pathControl.pathStyle = NSPathStyleStandard;
 	_pathControl.focusRingType = NSFocusRingTypeNone;
+	// a long path (e.g. a nested archive) must never widen the window or block shrinking it;
+	// let the control be compressed so it truncates/collapses segments to fit, like Finder
+	[_pathControl setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow-1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+	[_pathControl setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
 	_pathControl.target = self;
 	_pathControl.action = @selector(pathBarClicked:);
 	[pane addSubview:_pathControl positioned:NSWindowBelow relativeTo:status];
