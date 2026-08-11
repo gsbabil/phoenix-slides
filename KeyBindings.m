@@ -47,6 +47,10 @@ static const DYMenuActionDef kMenuActions[] = {
 	{"menu.copyAsPathname",    28},  // tag added in MainMenu.xib
 	{"menu.search",            29},  // tag added in MainMenu.xib
 	{"menu.subfolders",        30},  // tag added in MainMenu.xib
+	{"menu.zoomIn",            31},  // tag added in MainMenu.xib
+	{"menu.zoomOut",           32},  // tag added in MainMenu.xib
+	{"menu.zoomActualSize",    33},  // tag added in MainMenu.xib
+	{"menu.zoomFitToWindow",   34},  // tag added in MainMenu.xib
 	{"menu.saveRotation",     117},
 	{"menu.advancedOptions",  100},
 	{"menu.toggleLoop",         3},
@@ -77,6 +81,10 @@ static const DYKeyActionDef kSlideshowActions[] = {
 	{"slideshow.zoomOut",            SlideshowActionZoomOut,            "-"},
 	{"slideshow.actualSize",         SlideshowActionActualSize,         "="},
 	{"slideshow.resetView",          SlideshowActionResetView,          "*"},
+	{"slideshow.scrollUp",           SlideshowActionScrollUp,           "shift+up"},
+	{"slideshow.scrollDown",         SlideshowActionScrollDown,         "shift+down"},
+	{"slideshow.scrollLeft",         SlideshowActionScrollLeft,         "shift+left"},
+	{"slideshow.scrollRight",        SlideshowActionScrollRight,        "shift+right"},
 };
 
 static const DYKeyActionDef kBrowserActions[] = {
@@ -174,14 +182,26 @@ static BOOL ParseKeystroke(NSString *s, NSString **outKey, NSEventModifierFlags 
 	return YES;
 }
 
-// The character e.characters would produce for a modifier-free viewer keystroke,
-// or nil if the keystroke isn't valid as a single-key viewer binding.
-static NSString *ViewerCharForKeystroke(NSString *s) {
-	NSString *key; NSEventModifierFlags mask;
-	if (!ParseKeystroke(s, &key, &mask)) return nil;
-	if (mask != 0) return nil; // viewer keys carry no cmd/ctrl/opt (shift is folded into the char)
-	if (key.length != 1) return nil;
-	return key;
+// Viewer bindings are matched by a normalized "modifier-mask|key" token, so a keystroke
+// like ⇧← is distinct from ← (which stays reserved for navigation).
+static const NSEventModifierFlags kViewerMask =
+	NSEventModifierFlagCommand|NSEventModifierFlagControl|NSEventModifierFlagOption|NSEventModifierFlagShift;
+
+static NSString *EncodeViewerKey(NSString *keyEquiv, NSEventModifierFlags mask) {
+	return [NSString stringWithFormat:@"%lu|%@", (unsigned long)(mask & kViewerMask), keyEquiv];
+}
+
+// Token for a key event. For printable keys shift is already folded into the character
+// (charactersIgnoringModifiers keeps shift, so "+" and "D" arrive as-is) and dropped from the
+// mask; for function keys (arrows, etc.) shift is kept, so ⇧← ≠ ←.
+static NSString *EncodeViewerEvent(NSEvent *e) {
+	NSString *chars = e.charactersIgnoringModifiers.length ? e.charactersIgnoringModifiers : e.characters;
+	if (chars.length == 0) return nil;
+	NSEventModifierFlags mask = e.modifierFlags & kViewerMask;
+	unichar c = [chars characterAtIndex:0];
+	BOOL functionKey = (c >= 0xF700 && c <= 0xF8FF); // NSUpArrowFunctionKey … et al.
+	if (!functionKey) mask &= ~NSEventModifierFlagShift; // shift is folded into the printable char
+	return EncodeViewerKey(chars, mask);
 }
 
 #pragma mark -
@@ -325,20 +345,23 @@ static NSString *ViewerCharForKeystroke(NSString *s) {
 			keystrokes = @[];
 		}
 		for (NSString *ks in keystrokes) {
-			NSString *ch = ViewerCharForKeystroke(ks);
-			if (!ch) {
+			NSString *key; NSEventModifierFlags mask;
+			if (!ParseKeystroke(ks, &key, &mask) || key.length != 1) {
 				[_errors addObject:[NSString stringWithFormat:@"\"%@\" is not a valid single-key shortcut for \"%@\".", ks, actionId]];
 				continue;
 			}
-			if ([ReservedViewerChars() characterIsMember:[ch characterAtIndex:0]]) {
+			// plain (unmodified) navigation keys stay reserved; the same key with a modifier
+			// (e.g. ⇧←) is fair game
+			if (mask == 0 && [ReservedViewerChars() characterIsMember:[key characterAtIndex:0]]) {
 				[_errors addObject:[NSString stringWithFormat:@"\"%@\" is reserved for navigation and can't be reassigned (\"%@\").", ks, actionId]];
 				continue;
 			}
-			if (dispatch[ch]) {
-				[_errors addObject:[NSString stringWithFormat:@"The key \"%@\" is bound to more than one action; keeping the first.", ch]];
+			NSString *tok = EncodeViewerKey(key, mask);
+			if (dispatch[tok]) {
+				[_errors addObject:[NSString stringWithFormat:@"The key \"%@\" is bound to more than one action; keeping the first.", ks]];
 				continue; // first occurrence wins
 			}
-			dispatch[ch] = code;
+			dispatch[tok] = code;
 		}
 	}
 }
@@ -403,16 +426,16 @@ static NSMenuItem *MenuItemWithTag(NSMenu *menu, NSInteger tag) {
 #pragma mark Dispatch
 
 - (SlideshowAction)slideshowActionForEvent:(NSEvent *)e {
-	NSString *chars = e.characters;
-	if (chars.length == 0) return SlideshowActionNone;
-	NSNumber *code = _slideshowDispatch[chars];
+	NSString *tok = EncodeViewerEvent(e);
+	if (!tok) return SlideshowActionNone;
+	NSNumber *code = _slideshowDispatch[tok];
 	return code ? (SlideshowAction)code.integerValue : SlideshowActionNone;
 }
 
 - (BrowserAction)browserActionForEvent:(NSEvent *)e {
-	NSString *chars = e.characters;
-	if (chars.length == 0) return BrowserActionNone;
-	NSNumber *code = _browserDispatch[chars];
+	NSString *tok = EncodeViewerEvent(e);
+	if (!tok) return BrowserActionNone;
+	NSNumber *code = _browserDispatch[tok];
 	return code ? (BrowserAction)code.integerValue : BrowserActionNone;
 }
 
@@ -471,7 +494,8 @@ static NSMenuItem *MenuItemWithTag(NSMenu *menu, NSInteger tag) {
 		"  //\n"
 		"  // Value: a keystroke string, a list of strings, or null for no shortcut.\n"
 		"  // Modifiers: cmd, ctrl, opt, shift. Examples: \"cmd+shift+i\", \"n\", \"D\".\n"
-		"  // Single-key (slideshow/browser) shortcuts take no cmd/ctrl/opt.\n"
+		"  // Slideshow/browser keys may use modifiers too, e.g. \"shift+left\" to pan;\n"
+		"  // vim users can set slideshow.scrollLeft/Right/Up/Down to \"h\"/\"l\"/\"k\"/\"j\".\n"
 		"  // Delete a line to fall back to the built-in default.\n"
 		"  \"keybindings\": {\n"];
 	NSString *lastSection = nil;

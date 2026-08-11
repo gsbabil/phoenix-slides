@@ -1158,34 +1158,24 @@ scheduledTimerWithTimeInterval:timerIntvl
 		case SlideshowActionResetView:
 			[self redisplayImage]; // this resets zoom, rotate, and flip
 			break;
+		case SlideshowActionScrollUp:
+		case SlideshowActionScrollDown:
+		case SlideshowActionScrollLeft:
+		case SlideshowActionScrollRight: {
+			if (!imgView.dragMode) break; // pan only when the image overflows the view
+			NSSize b = imgView.bounds.size;
+			CGFloat dx = b.width/4, dy = b.height/4; // a quarter view per press
+			if (action == SlideshowActionScrollUp)        [imgView fakeDragX:0 y:dy];
+			else if (action == SlideshowActionScrollDown) [imgView fakeDragX:0 y:-dy];
+			else if (action == SlideshowActionScrollLeft) [imgView fakeDragX:-dx y:0];
+			else                                          [imgView fakeDragX:dx y:0];
+			break;
+		}
 	}
 }
 
-- (BOOL)performKeyEquivalent:(NSEvent *)e {
-	unichar c = [e.characters characterAtIndex:0];
-	//NSLog([e charactersIgnoringModifiers]);
-	//NSLog([e characters]);
-	// charactersIgnoringModifiers is 10.4 or later, and doesn't play well with Dvorak Qwerty-cmd
-	DYImageInfo *obj;
-	switch (c) {
-		case '=':
-			if (!(e.modifierFlags & NSEventModifierFlagNumericPad))
-				c = '+';
-			// intentional fall-through
-		case '+':
-		case '-':
-			if (currentIndex >= filenames.count) { NSBeep(); return YES; }
-			if ((obj = [imgCache infoForKey:ResolveAliasToPath(filenames[currentIndex])])) {
-				if (c == '+') [imgView zoomIn];
-				else if (c == '-') [imgView zoomOut];
-				else [imgView zoomActualSize];
-				[self saveZoomAndLoadFullSize:obj];
-			}
-			return YES;
-		default:
-			return [super performKeyEquivalent:e];
-	}
-}
+// Note: single-key zoom (+ − =) and reset (*) are handled through the rebindable
+// slideshow actions in keyDown:/performSlideshowAction:, so they stay configurable.
 
 
 // mouse control added for 1.2.2 (2006 Aug)

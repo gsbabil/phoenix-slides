@@ -1696,6 +1696,10 @@ enum {
 	COPY_PATHNAME = 28,
 	SEARCH = 29,
 	SUBFOLDERS = 30,
+	ZOOM_IN = 31,
+	ZOOM_OUT = 32,
+	ZOOM_ACTUAL = 32+1,
+	ZOOM_FIT = 32+2,
 	JPEG_OP = 100,
 	ROTATE_L = 107,
 	ROTATE_R = 105,
@@ -1717,6 +1721,13 @@ enum {
 	FILE_MENU = 300,
 };
 
+
+// View ▸ Zoom menu commands (⌘+ / ⌘− / ⌘0 / ⌘9). Forward to the slideshow; validateMenuItem:
+// keeps them enabled only while a slideshow image is showing.
+- (IBAction)zoomIn:(id)sender          { [slidesWindow performSlideshowAction:SlideshowActionZoomIn]; }
+- (IBAction)zoomOut:(id)sender         { [slidesWindow performSlideshowAction:SlideshowActionZoomOut]; }
+- (IBAction)zoomActualSize:(id)sender  { [slidesWindow performSlideshowAction:SlideshowActionActualSize]; }
+- (IBAction)zoomFitToWindow:(id)sender { [slidesWindow performSlideshowAction:SlideshowActionResetView]; }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem {
 	// Preferences carries a tag only so it can be rebound; it's always available,
@@ -1787,6 +1798,12 @@ enum {
 			// so it won't hijack SPACE in the slideshow, Prefs, or text fields
 			if (slidesWindow.isMainWindow) return NO;
 			return numSelected > 0 && frontWindow && frontWindow.window.isMainWindow && frontWindow.filenamesDone;
+		case ZOOM_IN:
+		case ZOOM_OUT:
+		case ZOOM_ACTUAL:
+		case ZOOM_FIT:
+			// image zoom is a slideshow-only command
+			return slidesWindow.isMainWindow && slidesWindow.currentImageLoaded;
 		case GO_TO_FOLDER:
 			return !slidesWindow.isMainWindow && frontWindow != nil;
 		case SEARCH:

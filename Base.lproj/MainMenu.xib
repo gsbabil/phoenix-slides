@@ -357,6 +357,37 @@ CA
                                     <action selector="doAutoRotateDisplayedImage:" target="207" id="861"/>
                                 </connections>
                             </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Zm0-sep-000"/>
+                            <menuItem title="Zoom" id="Zmn-par-001">
+                                <menu key="submenu" title="Zoom" id="Zmn-sub-001">
+                                    <items>
+                                        <menuItem title="Zoom In" tag="31" keyEquivalent="+" id="Zm1-in-0001">
+                                            <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                            <connections>
+                                                <action selector="zoomIn:" target="-1" id="Zm1-in-a001"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Zoom Out" tag="32" keyEquivalent="-" id="Zm2-ot-0001">
+                                            <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                            <connections>
+                                                <action selector="zoomOut:" target="-1" id="Zm2-ot-a001"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Actual Size" tag="33" keyEquivalent="0" id="Zm3-ac-0001">
+                                            <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                            <connections>
+                                                <action selector="zoomActualSize:" target="-1" id="Zm3-ac-a001"/>
+                                            </connections>
+                                        </menuItem>
+                                        <menuItem title="Fit to Window" tag="34" keyEquivalent="9" id="Zm4-ft-0001">
+                                            <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                                            <connections>
+                                                <action selector="zoomFitToWindow:" target="-1" id="Zm4-ft-a001"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                            </menuItem>
                         </items>
                     </menu>
                 </menuItem>

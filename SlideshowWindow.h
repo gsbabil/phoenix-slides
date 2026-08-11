@@ -6,6 +6,7 @@
 //California 94305, USA.
 
 @import Cocoa;
+#import "KeyBindings.h"
 
 @interface SlideshowWindow : NSWindow
 @property (nonatomic) BOOL fullscreenMode;
@@ -39,6 +40,8 @@
 @property (nonatomic) BOOL autoRotate;
 @property (nonatomic) NSTimeInterval autoadvanceTime;
 - (void)updateTimer;
+
+- (void)performSlideshowAction:(SlideshowAction)action; // rebindable viewer action (zoom/scroll/…)
 
 // menu methods
 - (IBAction)endSlideshow:(id)sender;

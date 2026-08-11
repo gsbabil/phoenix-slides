@@ -31,6 +31,10 @@ typedef NS_ENUM(NSInteger, SlideshowAction) {
 	SlideshowActionZoomOut,
 	SlideshowActionActualSize,
 	SlideshowActionResetView,
+	SlideshowActionScrollUp,
+	SlideshowActionScrollDown,
+	SlideshowActionScrollLeft,
+	SlideshowActionScrollRight,
 };
 
 // Rebindable single-key actions handled in the browser (CreeveyMainWindowController).
