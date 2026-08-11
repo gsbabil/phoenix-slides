@@ -183,6 +183,11 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 	BOOL _userPickedRow; // YES once the user arrows/clicks a row, so Enter honors it
 	NSUInteger _scanToken; // bumped per scan so a stale background result can be discarded
 	BOOL _scanning;        // YES while the current scan is still running
+	NSString *_typedPrefix; // the real user-typed text, without any inline-completion ghost tail
+	BOOL _suppressChange;   // YES while we programmatically edit the field (ghost insert/clear)
+	BOOL _deleting;         // set by delete keys so we don't re-suggest while erasing
+	BOOL _wantGhost;        // whether the next scan result should show an inline completion
+	BOOL _ghostShowing;     // YES while an inline completion tail is actually displayed
 }
 static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their sheet is up
 
@@ -210,6 +215,8 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 	_field = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 238, 520, 24)];
 	_field.delegate = self;
 	_field.stringValue = start ?: @"~/";
+	_typedPrefix = _field.stringValue; // no inline ghost until the user interacts
+	_wantGhost = NO;
 	[cv addSubview:_field];
 
 	NSScrollView *sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(20, 52, 520, 178)];
@@ -315,8 +322,12 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 			[self->_spinner stopAnimation:nil];
 			[self->_matches setArray:found];
 			[self->_table reloadData];
-			if (self->_matches.count)
+			if (self->_matches.count) {
 				[self->_table selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+				if (self->_wantGhost) [self showInlineCompletionForRow:0]; // Finder-style ghost of the top match
+			} else {
+				[self clearGhost]; // no matches: strip any leftover ghost
+			}
 		});
 	});
 }
@@ -328,17 +339,52 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 	if (row < 0) row = 0; else if (row >= (NSInteger)_matches.count) row = _matches.count - 1;
 	[_table selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
 	[_table scrollRowToVisible:row];
+	[self showInlineCompletionForRow:row]; // ghost follows the highlighted row (Finder-style)
+}
+
+// Show the highlighted match's remaining characters as selected "ghost" text after what the user
+// typed; → / Tab accept it. Reverts to the typed text if the match no longer shares that prefix.
+- (void)showInlineCompletionForRow:(NSInteger)row {
+	NSString *typed = _typedPrefix ?: @"";
+	NSTextView *ed = (NSTextView *)_field.currentEditor;
+	if (!ed) return;
+	NSString *sugg = (row >= 0 && row < (NSInteger)_matches.count)
+		? ([typed hasPrefix:@"~"] ? _matches[row].stringByAbbreviatingWithTildeInPath : _matches[row])
+		: nil;
+	if (typed.length && sugg.length > typed.length &&
+		[[sugg substringToIndex:typed.length] caseInsensitiveCompare:typed] == NSOrderedSame) {
+		_suppressChange = YES;
+		ed.string = sugg;
+		ed.selectedRange = NSMakeRange(typed.length, sugg.length - typed.length); // select the ghost tail
+		_suppressChange = NO;
+		_ghostShowing = YES;
+	} else {
+		[self clearGhost];
+	}
+}
+
+- (void)clearGhost {
+	_ghostShowing = NO;
+	NSTextView *ed = (NSTextView *)_field.currentEditor;
+	NSString *typed = _typedPrefix ?: @"";
+	if (!ed || [ed.string isEqualToString:typed]) return;
+	_suppressChange = YES;
+	ed.string = typed;
+	ed.selectedRange = NSMakeRange(typed.length, 0);
+	_suppressChange = NO;
 }
 
 - (void)completeSelection {
 	if (_table.selectedRow < 0 || _table.selectedRow >= (NSInteger)_matches.count) return;
 	_field.stringValue = [_matches[_table.selectedRow].stringByAbbreviatingWithTildeInPath stringByAppendingString:@"/"];
 	_field.currentEditor.selectedRange = NSMakeRange(_field.stringValue.length, 0);
+	_typedPrefix = _field.stringValue; // the drilled path is now the user's text
 	_userPickedRow = NO; // drilled in: back to typed-path mode for the new folder
+	_wantGhost = YES;    // preview the first child of the new folder
 	[self updateMatches];
 }
 
-- (void)rowClicked:(id)sender { _userPickedRow = YES; }
+- (void)rowClicked:(id)sender { _userPickedRow = YES; [self showInlineCompletionForRow:_table.selectedRow]; }
 
 - (id)windowWillReturnFieldEditor:(NSWindow *)sender toObject:(id)client {
 	if (client != _field) return nil; // default editor for anything else
@@ -346,19 +392,37 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 	return _fieldEditor;
 }
 
-- (void)controlTextDidChange:(NSNotification *)n { _userPickedRow = NO; [self updateMatches]; }
+- (void)controlTextDidChange:(NSNotification *)n {
+	if (_suppressChange) return; // our own ghost edit, not a user keystroke
+	_userPickedRow = NO;
+	_ghostShowing = NO;                 // the edit replaced any ghost; re-shown by the scan below
+	_typedPrefix = _field.stringValue; // any previous ghost was just replaced by the edit
+	_wantGhost = !_deleting;            // don't re-suggest while the user is erasing
+	_deleting = NO;
+	[self updateMatches];
+}
 
 - (BOOL)control:(NSControl *)control textView:(NSTextView *)tv doCommandBySelector:(SEL)sel {
-	if (sel == @selector(insertNewline:))    { [self accept:nil];        return YES; }
-	if (sel == @selector(cancelOperation:))  { [self cancel:nil];        return YES; }
-	if (sel == @selector(moveDown:))         { [self moveSelectionBy:1];  return YES; }
-	if (sel == @selector(moveUp:))           { [self moveSelectionBy:-1]; return YES; }
-	if (sel == @selector(insertTab:))        { [self completeSelection];  return YES; }
-	if (sel == @selector(moveRight:)) { // → completes the highlighted folder, but only
-		// at the end of the text so mid-text editing still moves the caret
-		if (NSMaxRange(tv.selectedRange) >= tv.string.length) { [self completeSelection]; return YES; }
+	// Finder-style: the path field always keeps focus. ↑/↓ move the highlighted suggestion (and
+	// its inline "ghost" completion), Return goes, Esc cancels. Tab completes the highlighted
+	// suggestion into the path (drilling one level, staying in edit mode); → does the same when the
+	// selection reaches the end of the text — mid-text → just moves the caret.
+	if (sel == @selector(deleteBackward:) || sel == @selector(deleteForward:)) { _deleting = YES; return NO; }
+	if (sel == @selector(insertNewline:))   { [self accept:nil];        return YES; }
+	if (sel == @selector(cancelOperation:)) { [self cancel:nil];        return YES; }
+	if (sel == @selector(moveDown:))        { [self moveSelectionBy:1];  return YES; }
+	if (sel == @selector(moveUp:))          { [self moveSelectionBy:-1]; return YES; }
+	if (sel == @selector(insertTab:))       { [self completeSelection];  return YES; }
+	if (sel == @selector(moveRight:)) {
+		// only accept when an inline ghost is actually showing; a fully-selected path with no
+		// suggestion (e.g. just after opening) should just deselect and move the caret to the end
+		if (_ghostShowing) { [self completeSelection]; return YES; }
 		return NO;
 	}
+	// any other command (←, Home, word-nav, …): drop a showing ghost first so no stray
+	// completion text is left behind, then let the editor act on the real typed text
+	if (tv.selectedRange.length && NSMaxRange(tv.selectedRange) >= tv.string.length && _typedPrefix.length)
+		[self clearGhost];
 	return NO;
 }
 
