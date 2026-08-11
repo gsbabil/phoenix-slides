@@ -147,11 +147,35 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 // A Finder-style "Go to the folder:" sheet: a path field with ~ expansion and a
 // list of matching sub-folders below. Enter goes to the typed path (or the
 // selected match); Tab / double-click completes; Esc cancels. Directories only.
-@interface DYGoToFolderController : NSObject <NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate>
+// Field editor that also pastes file URLs (e.g. a folder copied in Finder) as their POSIX
+// path, so ⌘V works like Finder's Go to Folder — not only plain-text paths.
+@interface DYPathFieldEditor : NSTextView
+@end
+@implementation DYPathFieldEditor
+- (void)paste:(id)sender {
+	NSPasteboard *pb = NSPasteboard.generalPasteboard;
+	// a real file URL (e.g. a folder copied in Finder) → its POSIX path
+	NSArray<NSURL *> *urls = [pb readObjectsForClasses:@[NSURL.class]
+		options:@{NSPasteboardURLReadingFileURLsOnlyKey:@YES}];
+	NSString *p = urls.firstObject.path;
+	if (p.length) { [self insertText:p replacementRange:self.selectedRange]; return; }
+	// plain-text path (e.g. `pwd | pbcopy`) → insert as-is, minus stray newlines
+	NSString *s = [pb stringForType:NSPasteboardTypeString];
+	if (s.length) {
+		s = [s stringByTrimmingCharactersInSet:NSCharacterSet.newlineCharacterSet];
+		[self insertText:s replacementRange:self.selectedRange];
+		return;
+	}
+	[super paste:sender];
+}
+@end
+
+@interface DYGoToFolderController : NSObject <NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate>
 @end
 @implementation DYGoToFolderController {
 	NSWindow *_parent, *_sheet;
 	NSTextField *_field;
+	DYPathFieldEditor *_fieldEditor;
 	NSTableView *_table;
 	NSProgressIndicator *_spinner; // shown while a slow folder is scanned in the background
 	NSMutableArray<NSString *> *_matches;
@@ -176,6 +200,7 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 
 	_sheet = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 560, 300)
 										 styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+	_sheet.delegate = self; // for windowWillReturnFieldEditor:toObject:
 	NSView *cv = _sheet.contentView;
 
 	NSTextField *label = [NSTextField labelWithString:NSLocalizedString(@"Go to the folder:", @"")];
@@ -314,6 +339,12 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 }
 
 - (void)rowClicked:(id)sender { _userPickedRow = YES; }
+
+- (id)windowWillReturnFieldEditor:(NSWindow *)sender toObject:(id)client {
+	if (client != _field) return nil; // default editor for anything else
+	if (!_fieldEditor) { _fieldEditor = [[DYPathFieldEditor alloc] init]; _fieldEditor.fieldEditor = YES; }
+	return _fieldEditor;
+}
 
 - (void)controlTextDidChange:(NSNotification *)n { _userPickedRow = NO; [self updateMatches]; }
 
