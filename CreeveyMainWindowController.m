@@ -210,6 +210,7 @@ typedef struct {
 	BOOL _quickLookActive;               // YES while the Quick Look panel has control
 	NSSearchField *_searchField;         // filters the displayed thumbnails by filename
 	NSString *_searchQuery;              // current filter text ("" / nil = no filter)
+	NSString *_lastLoadedPath;           // folder the filter applies to; changing it clears the filter
 	BOOL _searchRegex;                   // treat the query as a regular expression
 	NSRegularExpression *_searchRegexCompiled; // compiled query when in regex mode (nil if invalid)
 	NSWindow *_searchTipWindow;          // instant (no-delay) hover tip for the filter field
@@ -1352,7 +1353,6 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	currentFilesDeletable = NO;
 	filenamesDone = NO;
 	currCat = 0;
-	if (_searchQuery.length) { _searchQuery = nil; _searchField.stringValue = @""; } // filter is per-folder; clear on navigation
 	slidesBtn.enabled = NO;
 	// A mounted archive is browsed straight from its temp dir (the NSBrowser can't reliably
 	// navigate into a deep hidden temp path). Our own refresh calls pass sender==nil; a non-nil
@@ -1363,6 +1363,12 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 	} else {
 		if (_archiveTempDir) [self cleanupArchiveTemp]; // user navigated the browser → leave the archive
 		currentPath = [dirBrowserDelegate path];
+	}
+	// the filter is per-folder: clear it only on a real folder change, not on same-folder
+	// re-scans (toggling Unsupported/Subfolders, etc.)
+	if (![currentPath isEqualToString:_lastLoadedPath]) {
+		if (_searchQuery.length) { _searchQuery = nil; _searchField.stringValue = @""; }
+		_lastLoadedPath = currentPath;
 	}
 	_subfoldersButton.enabled = ![currentPath isEqualToString:@"/"]; // let's not ever load up the entire file system
 	if (self.wantsSubfolders && sender) { // sender is dirBrowserDelegate when non-nil
