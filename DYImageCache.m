@@ -418,7 +418,7 @@ static void ScaleCGImage(CGImageSourceRef orig, CGSize boundingSize, DYImageInfo
 
 // Ask Quick Look for a thumbnail when our own decoders can't render a file.
 // Runs on the background thumbnail thread, so blocking on the async generator is fine.
-static NSImage *DYQuickLookThumbnail(NSString *path, NSSize boundingSize) {
+static NSImage *QuickLookThumbnail(NSString *path, NSSize boundingSize) {
 	if (boundingSize.width < 1 || boundingSize.height < 1) return nil;
 	QLThumbnailGenerationRequest *req = [[QLThumbnailGenerationRequest alloc]
 		initWithFileAtURL:[NSURL fileURLWithPath:path]
@@ -491,7 +491,7 @@ static NSImage *DYQuickLookThumbnail(NSString *path, NSSize boundingSize) {
 	if (!imgInfo.image) {
 		// our decoders couldn't render it (e.g. an unsupported file shown via the
 		// browser's "Show Unsupported Files" toggle) — fall back to a Quick Look thumbnail
-		NSImage *ql = DYQuickLookThumbnail(path, boundingSize);
+		NSImage *ql = QuickLookThumbnail(path, boundingSize);
 		if (ql) {
 			imgInfo.image = ql;
 			imgInfo->pixelSize = ql.size;

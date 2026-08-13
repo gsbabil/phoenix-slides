@@ -149,9 +149,9 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 // selected match); Tab / double-click completes; Esc cancels. Directories only.
 // Field editor that also pastes file URLs (e.g. a folder copied in Finder) as their POSIX
 // path, so ⌘V works like Finder's Go to Folder — not only plain-text paths.
-@interface DYPathFieldEditor : NSTextView
+@interface PathFieldEditor : NSTextView
 @end
-@implementation DYPathFieldEditor
+@implementation PathFieldEditor
 - (void)paste:(id)sender {
 	NSPasteboard *pb = NSPasteboard.generalPasteboard;
 	// a real file URL (e.g. a folder copied in Finder) → its POSIX path
@@ -170,12 +170,12 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 }
 @end
 
-@interface DYGoToFolderController : NSObject <NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate>
+@interface GoToFolderController : NSObject <NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate>
 @end
-@implementation DYGoToFolderController {
+@implementation GoToFolderController {
 	NSWindow *_parent, *_sheet;
 	NSTextField *_field;
-	DYPathFieldEditor *_fieldEditor;
+	PathFieldEditor *_fieldEditor;
 	NSTableView *_table;
 	NSProgressIndicator *_spinner; // shown while a slow folder is scanned in the background
 	NSMutableArray<NSString *> *_matches;
@@ -192,7 +192,7 @@ static NSString *DYCharacterCountString(NSUInteger n) {
 static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their sheet is up
 
 + (void)presentForWindow:(NSWindow *)parent startingPath:(NSString *)start completion:(void(^)(NSString *))completion {
-	DYGoToFolderController *c = [[DYGoToFolderController alloc] init];
+	GoToFolderController *c = [[GoToFolderController alloc] init];
 	c->_parent = parent;
 	c->_completion = [completion copy];
 	c->_matches = [NSMutableArray array];
@@ -388,7 +388,7 @@ static NSMutableArray *_dyGoToFolderLive; // keep controllers alive while their 
 
 - (id)windowWillReturnFieldEditor:(NSWindow *)sender toObject:(id)client {
 	if (client != _field) return nil; // default editor for anything else
-	if (!_fieldEditor) { _fieldEditor = [[DYPathFieldEditor alloc] init]; _fieldEditor.fieldEditor = YES; }
+	if (!_fieldEditor) { _fieldEditor = [[PathFieldEditor alloc] init]; _fieldEditor.fieldEditor = YES; }
 	return _fieldEditor;
 }
 
@@ -2001,7 +2001,7 @@ enum {
 	// append a trailing slash (so the field lists the folder's contents) unless the path is
 	// already slash-terminated, e.g. root "/" — otherwise we'd produce "//"
 	NSString *start = wc.path.length ? ([abbrev hasSuffix:@"/"] ? abbrev : [abbrev stringByAppendingString:@"/"]) : @"~/";
-	[DYGoToFolderController presentForWindow:wc.window startingPath:start completion:^(NSString *chosen){
+	[GoToFolderController presentForWindow:wc.window startingPath:start completion:^(NSString *chosen){
 		if (chosen) [wc setPath:chosen];
 	}];
 }
