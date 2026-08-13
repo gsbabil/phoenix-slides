@@ -1026,11 +1026,17 @@ NSComparator ComparatorForSortOrder(short sortOrder) {
 }
 
 - (void)addFile:(NSString *)s atIndex:(NSUInteger)idx {
-	if (displayedFilenames.count == filenames.count) {
-		[displayedFilenames insertObject:s atIndex:idx];
-		[imgMatrix addImage:nil withFilename:s atIndex:idx];
-	}
 	[filenames insertObject:s atIndex:idx];
+	// show it in the grid too — but when a filter or category is active, only if it belongs there,
+	// inserted at the sort-correct spot within the (possibly smaller) displayed list
+	BOOL shows = [self filenamePassesSearch:s] &&
+		(currCat == 0 || (currCat >= 2 && [appDelegate.cats[currCat-2] containsObject:s]));
+	if (shows) {
+		NSUInteger didx = [displayedFilenames indexOfObject:s inSortedRange:NSMakeRange(0, displayedFilenames.count)
+											options:NSBinarySearchingInsertionIndex usingComparator:self.comparator];
+		[displayedFilenames insertObject:s atIndex:didx];
+		[imgMatrix addImage:nil withFilename:s atIndex:didx];
+	}
 	[self updateStatusFld];
 }
 
