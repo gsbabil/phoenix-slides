@@ -458,6 +458,28 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 @property (nonatomic) BOOL windowsWereRestoredAtLaunch;
 @end
 
+// Report files an operation couldn't process in a compact, scrollable alert. A plain informativeText
+// grows the alert past the screen when many paths fail; this caps the size and scrolls instead.
+void DYReportFileErrors(NSString *messageText, NSArray<NSString *> *files) {
+	if (files.count == 0) return;
+	NSAlert *alert = [[NSAlert alloc] init];
+	alert.messageText = messageText;
+	alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"%lu file(s) could not be processed:", @""), (unsigned long)files.count];
+	NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 380, 140)];
+	scroll.hasVerticalScroller = YES;
+	scroll.borderType = NSBezelBorder;
+	NSTextView *tv = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 380, 140)];
+	tv.editable = NO;
+	tv.drawsBackground = NO;
+	tv.string = [files componentsJoinedByString:@"\n"];
+	tv.autoresizingMask = NSViewWidthSizable;
+	tv.textContainerInset = NSMakeSize(4, 4);
+	scroll.documentView = tv;
+	alert.accessoryView = scroll;
+	[alert addButtonWithTitle:NSLocalizedString(@"OK", @"")];
+	[alert runModal];
+}
+
 @implementation CreeveyController
 {
 	NSMutableSet *cats[NUM_FNKEY_CATS];
@@ -1122,6 +1144,39 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	item.title = [NSUserDefaults.standardUserDefaults integerForKey:@"slideshowDefaultMode"] == 0 ? NSLocalizedString(@"Begin Slideshow In Window", @"Slideshow menu") : NSLocalizedString(@"Begin Slideshow (Full Screen)", @"Slideshow menu");
 }
 
+// Batch file-operation progress, reusing the shared "Progress Panel" (bar + label + Cancel) that
+// JPEG transforms use. Only worth showing for multi-file operations; a single file is instant.
+// Returns a modal session to pump, or NULL when no panel is shown (count <= 1).
+- (NSModalSession)beginFileProgress:(NSUInteger)count title:(NSString *)title {
+	if (count <= 1) return NULL;
+	jpegProgressBar.window.title = title;
+	jpegProgressBar.usesThreadedAnimation = NO; // step immediately per file, not eased/animated (no bounce)
+	jpegProgressBar.indeterminate = NO;
+	jpegProgressBar.minValue = 0;
+	jpegProgressBar.doubleValue = 0;
+	jpegProgressBar.maxValue = count;
+	NSTextField *label = [jpegProgressBar.window.contentView viewWithTag:2];
+	label.stringValue = title;
+	((NSButton *)[jpegProgressBar.window.contentView viewWithTag:1]).enabled = YES; // Cancel
+	NSModalSession s = [NSApp beginModalSessionForWindow:jpegProgressBar.window];
+	[NSApp runModalSession:s];
+	return s;
+}
+// Advance the bar one step and show the current file name; returns NO if the user pressed Cancel.
+- (BOOL)stepFileProgress:(NSModalSession)s name:(NSString *)name {
+	if (!s) return YES;
+	NSTextField *label = [jpegProgressBar.window.contentView viewWithTag:2];
+	label.stringValue = name;
+	[jpegProgressBar incrementBy:1];
+	[jpegProgressBar display]; // redraw the exact proportion now, so the fill steps smoothly L→R
+	return [NSApp runModalSession:s] == NSModalResponseContinue;
+}
+- (void)endFileProgress:(NSModalSession)s {
+	if (!s) return;
+	[NSApp endModalSession:s];
+	[jpegProgressBar.window orderOut:self];
+}
+
 - (void)moveSelectedFilesTo:(NSURL *)dest {
 	NSURL *curr = slidesWindow.isMainWindow ? slidesWindow.baseURL : frontWindow.URL;
 	if ([dest isEqual:curr]) return;
@@ -1131,25 +1186,26 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	NSMutableArray<NSURL*> *moved = [NSMutableArray arrayWithCapacity:files.count];
 	NSMutableArray<NSString*> *notMoved = [NSMutableArray array];
 
-	NSError * __autoreleasing err;
+	NSFileManager *fm = NSFileManager.defaultManager;
+	NSModalSession prog = [self beginFileProgress:files.count title:NSLocalizedString(@"Moving Files…", @"")];
 	for (NSString *f in files) {
 		NSURL *destUrl = [dest URLByAppendingPathComponent:f.lastPathComponent];
-		if ([NSFileManager.defaultManager moveItemAtPath:f toPath:destUrl.path error:&err]) {
+		// Skip files already at the destination (same folder, or a copy of the same name already
+		// there) — that's not an error, so don't report it.
+		if ([destUrl.path isEqualToString:f] || [fm fileExistsAtPath:destUrl.path]) {
+			if (![self stepFileProgress:prog name:f.lastPathComponent]) break;
+			continue;
+		}
+		if ([fm moveItemAtPath:f toPath:destUrl.path error:NULL]) {
 			[paths addObject:f];
 			[moved addObject:destUrl];
 		} else {
 			[notMoved addObject:f];
 		}
+		if (![self stepFileProgress:prog name:f.lastPathComponent]) break; // Cancel: keep what moved
 	}
-	if (notMoved.count) {
-		NSAlert *alert = [[NSAlert alloc] init];
-		if (notMoved.count == 1) {
-			alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"The file “%@” could not be moved because of an error: %@", @""), notMoved[0].lastPathComponent, err.localizedDescription];
-		} else {
-			alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"%lu files could not be moved because of an error.",@""), notMoved.count];
-		}
-		DYRunAlert(alert);
-	}
+	[self endFileProgress:prog];
+	DYReportFileErrors(NSLocalizedString(@"Some files couldn’t be moved.", @""), notMoved);
 	_originalPaths = [paths copy];
 	_movedUrls = [moved copy];
 	[self removePicsAndTrash:NO];
@@ -1163,20 +1219,22 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	NSArray *files = slidesWindow.isMainWindow ? @[slidesWindow.currentFile] : frontWindow.currentSelection;
 	NSMutableArray<NSString*> *notCopied = [NSMutableArray array];
 
-	NSError * __autoreleasing err;
+	NSFileManager *fm = NSFileManager.defaultManager;
+	NSModalSession prog = [self beginFileProgress:files.count title:NSLocalizedString(@"Copying Files…", @"")];
 	for (NSString *f in files) {
 		NSURL *destUrl = [dest URLByAppendingPathComponent:f.lastPathComponent];
-		if (![NSFileManager.defaultManager copyItemAtPath:f toPath:destUrl.path error:&err])
+		// Skip files already at the destination (copying a file onto itself, or a same-named file
+		// already there) rather than failing with an "already exists" error.
+		if ([destUrl.path isEqualToString:f] || [fm fileExistsAtPath:destUrl.path]) {
+			if (![self stepFileProgress:prog name:f.lastPathComponent]) break;
+			continue;
+		}
+		if (![fm copyItemAtPath:f toPath:destUrl.path error:NULL])
 			[notCopied addObject:f];
+		if (![self stepFileProgress:prog name:f.lastPathComponent]) break; // Cancel: keep what copied
 	}
-	if (notCopied.count) {
-		NSAlert *alert = [[NSAlert alloc] init];
-		if (notCopied.count == 1)
-			alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"The file “%@” could not be copied because of an error: %@", @""), notCopied[0].lastPathComponent, err.localizedDescription];
-		else
-			alert.informativeText = [NSString stringWithFormat:NSLocalizedString(@"%lu files could not be copied because of an error.", @""), notCopied.count];
-		DYRunAlert(alert);
-	}
+	[self endFileProgress:prog];
+	DYReportFileErrors(NSLocalizedString(@"Some files couldn’t be copied.", @""), notCopied);
 }
 
 - (IBAction)moveSelectedFiles:(id)sender {

@@ -12,6 +12,9 @@
 
 NSMutableAttributedString* Fileinfo2EXIFString(NSString *origPath, DYImageCache *cache, BOOL moreExif);
 
+// Compact, scrollable alert listing files a Move/Copy operation couldn't process.
+void DYReportFileErrors(NSString *messageText, NSArray<NSString *> *files);
+
 // Multiplier for interface text (1.0 / 1.25 / 1.5) from the "interfaceTextSize" preference.
 CGFloat DYInterfaceTextScale(void);
 
