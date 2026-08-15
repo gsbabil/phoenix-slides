@@ -354,8 +354,8 @@
                                             </connections>
                                         </button>
                                         <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="ORp-lbl-001">
-                                            <rect key="frame" x="248" y="111" width="122" height="16"/>
-                                            <textFieldCell key="cell" sendsActionOnEndEditing="YES" title="Open Recent count:" id="ORp-lbc-001">
+                                            <rect key="frame" x="210" y="111" width="160" height="16"/>
+                                            <textFieldCell key="cell" sendsActionOnEndEditing="YES" alignment="right" title="Recent paths to keep:" id="ORp-lbc-001">
                                                 <font key="font" metaFont="system"/>
                                                 <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
                                                 <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>

@@ -476,6 +476,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 
 	NSMutableArray<NSDictionary *> *_recentFolders; // Open Recent: in-memory, most-recent-first
 	BOOL _recentFoldersDirty;                        // unsaved changes since last flush
+	NSMenu *_moveRecentMenu, *_copyRecentMenu;       // File ▸ Move/Copy To Recent submenus
 
 	DYImageCache *thumbsCache;
 	
@@ -535,7 +536,9 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 		@"interfaceTextCustomSize":@13, // point size when interfaceTextSize == 3 (custom)
 		@"copyPathnameShellQuoted":@YES, // Copy as Pathname: YES = shell-quoted, NO = Finder-style raw
 		@"recentFolders":@[],            // Open Recent list (array of state dicts, most-recent-first)
-		@"recentFoldersMax":@10,         // how many recent folders to remember
+		@"recentFoldersMax":@10,         // how many recent paths to keep (Open Recent + Move/Copy To Recent)
+		@"recentMoveToFolders":@[],      // Move To Recent: recent destination folders, most-recent-first
+		@"recentCopyToFolders":@[],      // Copy To Recent: recent destination folders, most-recent-first
 	}];
 
 	[NSValueTransformer setValueTransformer:[[TimeIntervalPlusWeekToStringTransformer alloc] init]
@@ -601,8 +604,7 @@ static NSModalResponse DYRunAlert(NSAlert *alert) {
 	for (NSString *type in disabledFiletypes) {
 		[filetypes removeObject:type];
 	}
-	[self updateMoveToMenuItem];
-	[self updateCopyToMenuItem];
+	[self setupRecentDestinationMenus];
 	[self updateAlternateSlideshowMenuItem];
 	[self updateAppearance];
 	
@@ -1027,22 +1029,91 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	[NSApp stopModal];
 }
 
-- (void)updateMoveToMenuItem {
-	NSString *path = [NSUserDefaults.standardUserDefaults stringForKey:@"lastUsedMoveToFolder"];
-	if (path == nil) return;
-	NSMenu *m = [NSApp.mainMenu itemWithTag:FILE_MENU].submenu;
-	NSMenuItem *item = [m itemWithTag:MOVE_TO_AGAIN];
-	NSString *name = [NSFileManager.defaultManager displayNameAtPath:path];
-	item.title = [NSString stringWithFormat:NSLocalizedString(@"Move to “%@” Again", @"File menu"), name];
+#pragma mark Move/Copy To Recent (submenus of recent destination folders)
+
+// Number of recent items to keep — shared with Open Recent (Preferences ▸ "Recent paths to keep").
+- (NSInteger)recentItemsMax {
+	return MAX(1, [NSUserDefaults.standardUserDefaults integerForKey:@"recentFoldersMax"]);
 }
 
-- (void)updateCopyToMenuItem {
-	NSString *path = [NSUserDefaults.standardUserDefaults stringForKey:@"lastUsedCopyToFolder"];
-	if (path == nil) return;
-	NSMenu *m = [NSApp.mainMenu itemWithTag:FILE_MENU].submenu;
-	NSMenuItem *item = [m itemWithTag:COPY_TO_AGAIN];
-	NSString *name = [NSFileManager.defaultManager displayNameAtPath:path];
-	item.title = [NSString stringWithFormat:NSLocalizedString(@"Copy to “%@” Again", @"File menu"), name];
+- (NSArray<NSString *> *)recentDestinationsForKey:(NSString *)key {
+	return [NSUserDefaults.standardUserDefaults arrayForKey:key] ?: @[];
+}
+
+// Push a destination to the top of a recent list (dedup, cap at recentItemsMax), mirror it to the
+// single "last used" default (used for validation), and rebuild the submenus.
+- (void)recordRecentDestination:(NSString *)path listKey:(NSString *)listKey lastKey:(NSString *)lastKey {
+	if (path.length == 0) return;
+	NSMutableArray<NSString *> *list = [[self recentDestinationsForKey:listKey] mutableCopy];
+	[list removeObject:path];
+	[list insertObject:path atIndex:0];
+	while ((NSInteger)list.count > self.recentItemsMax) [list removeLastObject];
+	NSUserDefaults *u = NSUserDefaults.standardUserDefaults;
+	[u setObject:list forKey:listKey];
+	[u setObject:path forKey:lastKey];
+	[self rebuildRecentDestinationMenus];
+}
+- (void)recordRecentMoveDestination:(NSString *)path { [self recordRecentDestination:path listKey:@"recentMoveToFolders" lastKey:@"lastUsedMoveToFolder"]; }
+- (void)recordRecentCopyDestination:(NSString *)path { [self recordRecentDestination:path listKey:@"recentCopyToFolders" lastKey:@"lastUsedCopyToFolder"]; }
+
+// Attach fresh submenus to the "Move To Recent" / "Copy To Recent" items (called once at launch).
+- (void)setupRecentDestinationMenus {
+	NSMenu *file = [NSApp.mainMenu itemWithTag:FILE_MENU].submenu;
+	NSMenuItem *mv = [file itemWithTag:MOVE_TO_AGAIN], *cp = [file itemWithTag:COPY_TO_AGAIN];
+	_moveRecentMenu = [[NSMenu alloc] initWithTitle:mv.title]; _moveRecentMenu.autoenablesItems = NO;
+	_copyRecentMenu = [[NSMenu alloc] initWithTitle:cp.title]; _copyRecentMenu.autoenablesItems = NO;
+	mv.submenu = _moveRecentMenu;
+	cp.submenu = _copyRecentMenu;
+	[self rebuildRecentDestinationMenus];
+}
+
+- (void)rebuildRecentDestinationMenus {
+	[self fillRecentMenu:_moveRecentMenu listKey:@"recentMoveToFolders" action:@selector(moveToRecentFolder:) shortcut:@"m"];
+	[self fillRecentMenu:_copyRecentMenu listKey:@"recentCopyToFolders" action:@selector(copyToRecentFolder:) shortcut:@"c"];
+}
+
+// Fill one recent-destination submenu. The most-recent item carries the original ⌃⌘M / ⌃⌘C shortcut
+// so it still repeats the last destination. Built eagerly (not on open) so the shortcut stays live.
+- (void)fillRecentMenu:(NSMenu *)menu listKey:(NSString *)listKey action:(SEL)action shortcut:(NSString *)shortcut {
+	if (!menu) return;
+	[menu removeAllItems];
+	NSArray<NSString *> *list = [self recentDestinationsForKey:listKey];
+	if (list.count == 0) {
+		NSMenuItem *none = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"None", @"") action:NULL keyEquivalent:@""];
+		none.enabled = NO;
+		[menu addItem:none];
+		return;
+	}
+	NSFileManager *fm = NSFileManager.defaultManager;
+	NSUInteger i = 0;
+	for (NSString *path in list) {
+		if ((NSInteger)i >= self.recentItemsMax) break; // already capped, but stay safe if max shrank
+		NSMenuItem *mi = [[NSMenuItem alloc] initWithTitle:path.stringByAbbreviatingWithTildeInPath
+													action:action keyEquivalent:(i == 0 ? shortcut : @"")];
+		if (i == 0) mi.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand;
+		mi.target = self;
+		mi.representedObject = path;
+		mi.enabled = [fm fileExistsAtPath:path]; // grey out folders that no longer exist
+		NSImage *icon = [NSWorkspace.sharedWorkspace iconForFile:path];
+		icon.size = NSMakeSize(16, 16);
+		mi.image = icon;
+		[menu addItem:mi];
+		i++;
+	}
+}
+
+- (IBAction)moveToRecentFolder:(NSMenuItem *)sender {
+	NSString *path = sender.representedObject;
+	if (![path isKindOfClass:NSString.class]) return;
+	[self moveSelectedFilesTo:[NSURL fileURLWithPath:path isDirectory:YES]];
+	[self recordRecentMoveDestination:path]; // bump to the top
+}
+
+- (IBAction)copyToRecentFolder:(NSMenuItem *)sender {
+	NSString *path = sender.representedObject;
+	if (![path isKindOfClass:NSString.class]) return;
+	[self copySelectedFilesTo:[NSURL fileURLWithPath:path isDirectory:YES]];
+	[self recordRecentCopyDestination:path];
 }
 
 - (void)updateAlternateSlideshowMenuItem {
@@ -1116,14 +1187,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	if ([op runModal] != NSModalResponseOK) return;
 	NSURL *dest = op.URL;
 	[self moveSelectedFilesTo:dest];
-	[NSUserDefaults.standardUserDefaults setObject:dest.path forKey:@"lastUsedMoveToFolder"];
-	[self updateMoveToMenuItem];
-}
-
-- (IBAction)moveSelectedFilesAgain:(id)sender {
-	NSString *folder = [NSUserDefaults.standardUserDefaults stringForKey:@"lastUsedMoveToFolder"];
-	NSURL *dest = [NSURL fileURLWithPath:folder isDirectory:YES];
-	[self moveSelectedFilesTo:dest];
+	[self recordRecentMoveDestination:dest.path];
 }
 
 - (IBAction)copySelectedFiles:(id)sender {
@@ -1134,14 +1198,7 @@ static void ShowDirectoryContentsIfPossible(NSURL *u) {
 	if ([op runModal] != NSModalResponseOK) return;
 	NSURL *dest = op.URL;
 	[self copySelectedFilesTo:dest];
-	[NSUserDefaults.standardUserDefaults setObject:dest.path forKey:@"lastUsedCopyToFolder"];
-	[self updateCopyToMenuItem];
-}
-
-- (IBAction)copySelectedFilesAgain:(id)sender {
-	NSString *folder = [NSUserDefaults.standardUserDefaults stringForKey:@"lastUsedCopyToFolder"];
-	NSURL *dest = [NSURL fileURLWithPath:folder isDirectory:YES];
-	[self copySelectedFilesTo:dest];
+	[self recordRecentCopyDestination:dest.path];
 }
 
 
@@ -1836,8 +1893,9 @@ enum {
 				: numSelected > 0 && frontWindow && frontWindow.currentFilesDeletable;
 			if (!writable) return NO;
 			if (test_t != JPEG_OP) {
-				if (t == MOVE_TO_AGAIN) return [NSUserDefaults.standardUserDefaults stringForKey:@"lastUsedMoveToFolder"] != nil;
-				if (t == COPY_TO_AGAIN) return [NSUserDefaults.standardUserDefaults stringForKey:@"lastUsedCopyToFolder"] != nil;
+				// Move/Copy To Recent (submenu parents): enable only when the recent list isn't empty.
+				if (t == MOVE_TO_AGAIN) return [self recentDestinationsForKey:@"recentMoveToFolders"].count > 0;
+				if (t == COPY_TO_AGAIN) return [self recentDestinationsForKey:@"recentCopyToFolders"].count > 0;
 				return YES;
 			}
 			isjpeg = slidesWindow.isMainWindow

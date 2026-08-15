@@ -51,9 +51,11 @@ NSDirectoryEnumerator *CreeveyEnumerator(NSString *path, BOOL recurseSubfolders)
 - (IBAction)copySelectedFilePaths:(id)sender;
 - (IBAction)setDesktopPicture:(id)sender;
 - (IBAction)moveSelectedFiles:(id)sender;
-- (IBAction)moveSelectedFilesAgain:(id)sender;
 - (IBAction)copySelectedFiles:(id)sender;
-- (IBAction)copySelectedFilesAgain:(id)sender;
+- (IBAction)moveToRecentFolder:(id)sender; // File ▸ Move To Recent ▸ <folder>
+- (IBAction)copyToRecentFolder:(id)sender; // File ▸ Copy To Recent ▸ <folder>
+- (void)recordRecentMoveDestination:(NSString *)path; // push a Move destination onto the recent list
+- (void)recordRecentCopyDestination:(NSString *)path; // push a Copy destination onto the recent list
 - (IBAction)moveToTrash:(id)sender;
 - (IBAction)deleteSelectedFilesPermanently:(id)sender;
 - (IBAction)renameSelectedFile:(id)sender;
